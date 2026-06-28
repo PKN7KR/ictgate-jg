@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.24</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.25</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -7254,11 +7254,23 @@ async function loadRec(r){
   loadHistory();
 }
 async function delRec(id){
-  if(_coworkActive){
-    if(!confirm('⚠️ 공동작업 중입니다.\n이 이력을 삭제하면 상대방에게도 반영됩니다.\n\n정말 삭제하시겠습니까?')) return;
-  } else {
-    if(!confirm('이력을 삭제하시겠습니까?')) return;
+  // 이력 정보 확인
+  const rec=(_memRecs||[]).find(r=>r.id===id)||{};
+  const recName=rec.m_co||rec.p_co||'(미입력)';
+  const recPhotos=_memPhotos&&_memPhotos[id]?Object.values(_memPhotos[id]).flat():[];
+  const photoCnt=recPhotos.length;
+
+  // 2단계 확인
+  const msg1=photoCnt>0
+    ? `⚠️ 이력을 삭제하시겠습니까?\n\n📋 "${recName}"\n📸 사진 ${photoCnt}장 포함\n\n사진은 복구 불가합니다.`
+    : `⚠️ 이력을 삭제하시겠습니까?\n\n📋 "${recName}"`;
+  if(!confirm(msg1)) return;
+
+  // 사진 있으면 2차 확인
+  if(photoCnt>0){
+    if(!confirm(`정말로 삭제하시겠습니까?\n\n"${recName}"의 사진 ${photoCnt}장이\nCloudinary에서 영구 삭제됩니다.\n\n되돌릴 수 없습니다.`)) return;
   }
+
   _noAutoSave=true;
   clearTimeout(autoTimer);
   lsDel(id);
@@ -7267,13 +7279,29 @@ async function delRec(id){
     resetUI(false);
     clearTimeout(autoTimer);
   }
-  // Supabase에서도 삭제 (레코드 + 사진)
+
+  // Supabase + Cloudinary 삭제
   if(curUser&&curUser.id!=='guest'){
     sbDeleteRecord(id).catch(()=>{});
-    sbDeletePhotos(id).catch(()=>{});
+    if(photoCnt>0){
+      const publicIds=recPhotos.map(p=>{
+        const url=p.url||p.srcUrl||'';
+        const m=url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+        return m?m[1]:null;
+      }).filter(Boolean);
+      if(publicIds.length){
+        fetch('/.netlify/functions/cld-delete',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({public_ids:publicIds})
+        }).catch(()=>{});
+      }
+      sbDeletePhotos(id).catch(()=>{});
+    }
   }
+
   loadHistory();
-  showToast('이력 삭제됨');
+  showToast(photoCnt>0?`"${recName}" 삭제 (사진 ${photoCnt}장 포함)`:`"${recName}" 이력 삭제됨`);
   setTimeout(()=>{_noAutoSave=false;},500);
 }
 function newRec(){
