@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.23</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.24</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -2904,7 +2904,7 @@ async function admDelUser(userId, userName){
         const match=p.url.match(/\/([^/]+)\.[a-z]+$/);
         if(match){
           try{
-            await fetch('/.netlify/functions/cld-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public_id:'ictgate/'+match[1]})});
+            await fetch('/.netlify/functions/cld-delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({public_ids:['ictgate/'+match[1]]})});
           }catch(e){}
         }
       }
@@ -8551,7 +8551,7 @@ async function deleteEqPhoto(rid,pfx,idx,tab){
       fetch('/.netlify/functions/cld-delete',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({public_id:match[1]})
+        body:JSON.stringify({public_ids:[match[1]]})
       }).catch(()=>{});
     }
   }
