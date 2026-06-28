@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.22</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.23</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -3217,8 +3217,7 @@ async function openArchiveModal(recId, recName){
       <div style="padding:12px;background:#f8f8f8;border-radius:6px;margin-bottom:16px;font-size:13px;line-height:2">
         <div>☁ Cloudinary 사진: <b>${publicIds.length}장</b></div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div>🔑 api_secret: <span style="color:${hasSecret?'#166534':'#991b1b'};font-weight:700">${hasSecret?'✅ 설정됨':'❌ 없음 — 삭제 불가'}</span></div>
-          <button onclick="openCldSecretModal()" style="padding:3px 10px;font-size:11px;background:#0a0a0a;color:#fff;border:none;border-radius:4px;cursor:pointer">🔑 Secret 입력</button>
+          <div>🔑 Cloudinary 삭제: <span style="color:#166534;font-weight:700">✅ Netlify 환경변수로 처리</span></div>
         </div>
       </div>
 
@@ -3279,9 +3278,7 @@ async function openArchiveModal(recId, recName){
 
     try{
       // 사전 체크
-      if(!hasSecret){
-        throw new Error('CLD Secret이 없습니다. 스토리지 분석 > CLD Secret 먼저 설정하세요');
-      }
+      // Netlify Function이 환경변수로 Secret 처리 — 앱에서 체크 불필요
       if(!publicIds.length){
         throw new Error('삭제할 Cloudinary 사진이 없습니다');
       }
