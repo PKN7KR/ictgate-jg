@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.31</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.32</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -6083,20 +6083,7 @@ async function enterApp(user){
     _checkNaverBrowser(); // 네이버 브라우저 안내
     // Supabase 계정 동기화 (백그라운드)
     _sbSyncAccounts().catch(()=>{});
-    // 첫 로그인 시 자동 마이그레이션 (Supabase에 데이터 없으면 로컬 자동 업로드)
-    if(user.id!=='guest'){
-      setTimeout(async()=>{
-        try{
-          const sbRecs=await sbLoadRecords();
-          const localRecs=lsGet();
-          if(sbRecs.length===0 && localRecs.length>0){
-            sysLog('[AutoMigrate] Supabase 데이터 없음 → 자동 마이그레이션 시작','info');
-            await sbMigrateAll();
-            showToast('☁ 로컬 데이터를 Supabase에 자동 업로드했습니다',3000);
-          }
-        }catch(e){sysLog('[AutoMigrate] 실패: '+e.message,'warn');}
-      }, 3000);
-    }
+    // 자동 마이그레이션 제거 — Supabase가 진실의 원천, localStorage 기반 업로드 금지
     // 세션 하트비트 시작 (10분마다 갱신 — 중복 로그인 방지)
     _startSessionHeartbeat(user.id, user.role);
     // Supabase 자동 동기화 시작 (QR 없이도 10초마다 자동 pull)
@@ -12396,17 +12383,21 @@ async function sbMigrateAll(){
   }
   _sbMigrateLog(`✅ 레코드 업로드: ${recOk}건 성공, ${recFail}건 실패`);
 
-  // 2. 사진 URL 업로드
+  // 2. 사진 URL 업로드 — Supabase 기존 URL과 비교 후 없는 것만 INSERT (중복 방지)
   let photoOk=0, photoFail=0;
   for(const r of recs){
     try{
-      const ph=_memPhotos[r.id]||{}; // Supabase stub — 메모리 캐시
+      const ph=_memPhotos[r.id]||{};
       if(!ph||!Object.keys(ph).length) continue;
+      // 이미 Supabase에 있는 URL 수집
+      const existingPh=await sbLoadPhotos(r.id);
+      const existingUrls=new Set(Object.values(existingPh).flat().map(p=>p.url).filter(Boolean));
       for(const [rid, arr] of Object.entries(ph)){
         for(const p of (arr||[])){
           const url=p.url||p.srcUrl||p.thumb;
-          if(url&&url.includes('cloudinary.com')){
+          if(url&&url.includes('cloudinary.com')&&!existingUrls.has(url)){
             await sbSavePhoto(r.id, rid, url, p.name||'사진');
+            existingUrls.add(url); // 중복 방지
             photoOk++;
           }
         }
