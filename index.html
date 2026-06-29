@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.25</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.28</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4314,7 +4314,7 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
         if(!res2.ok){showToast('❌ 재시도 실패: '+res2.status,4000);return;}
         const data=await res2.json();
         const text=(data?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
-        if(text&&remEl){remEl.value=text.slice(0,80);remEl.dispatchEvent(new Event('input'));autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
+        if(text&&remEl){_setRemValue(remEl,'🤖 '+text.slice(0,80));remEl.classList.add('ai-filled');_remCache[remEl.id]='🤖 '+text.slice(0,80);remEl.dispatchEvent(new Event('input'));autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
         return;
       }
       showToast('❌ API 오류: '+res.status,4000);return;
@@ -4325,9 +4325,10 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
 
     if(text&&remEl){
       const _val=text.slice(0,80);
-      remEl.value='🤖 '+_val;
+      _setRemValue(remEl,'🤖 '+_val);
       remEl.classList.add('ai-filled');
-      _remCache[remEl.id]='🤖 '+_val; // 메모리 캐시에도 저장
+      _remCache[remEl.id]='🤖 '+_val;
+      remEl.dispatchEvent(new Event('input'));
       autoSave();
       showToast('✅ 비고 기입: '+_val.slice(0,20),3000);
     }
@@ -11339,7 +11340,8 @@ function copyShareUrl(){
 let _coworkTimer=null;
 let _coworkActive=false;
 let _coworkCode=''; // 현재 세션 공유 코드
-const COWORK_INTERVAL=10*1000; // 10초
+const COWORK_INTERVAL=10*1000; // 10초 고정 (공유작업 신뢰성 우선)
+const COWORK_INTERVAL_MULTI=10*1000;
 
 // 기기 고유 세션 ID (같은 계정이라도 기기를 구분하기 위해 사용)
 const _deviceSessionId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -11606,14 +11608,14 @@ function startCoworkPoll(){
   _coworkSave();
   // 로그인 직후 즉시 pull — 이력 바로 표시
   _coworkLoad().catch(()=>{});
-  // 1분 주기 pull
-  _coworkTimer=setInterval(async()=>{
+  // 10초 주기 pull (공유작업 실시간 동기화)
+  const _pollFn=async()=>{
     if(!curUser||curUser.id==='guest'){stopCoworkPoll();return;}
-    sysLog('[Cowork] 자동 동기화 (1분 주기)','info');
     _setCoworkStatus('syncing');
     await _coworkLoad();
-    await _coworkSave(); // 내 변경사항도 공용 경로에 반영
-  }, COWORK_INTERVAL);
+    await _coworkSave();
+  };
+  _coworkTimer=setInterval(_pollFn,COWORK_INTERVAL);
   // 화면 복귀 시 즉시 pull
   document.addEventListener('visibilitychange', _coworkVisHandler);
   _setCoworkStatus('ok');
