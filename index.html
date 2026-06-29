@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.30</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.31</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -11487,10 +11487,11 @@ async function _coworkLoad(){
     const sbRecs=await sbLoadRecords();
     // Supabase가 진실의 원천 — _memRecs와 localStorage 캐시 항상 갱신
     // 단, 현재 작업 중인 레코드(curRecId)가 Supabase에 아직 없으면(저장 중) 로컬 것 보존
-    if(sbRecs&&sbRecs.length){
+    // ★ sbRecs가 빈 배열(0건)이어도 반드시 갱신 — 타 계정 캐시 잔존 방지
+    {
       const localCur=_memRecs.find(r=>r.id===curRecId);
-      const sbHasCur=sbRecs.some(r=>r.id===curRecId);
-      const merged=sbHasCur ? sbRecs : (localCur ? [localCur,...sbRecs] : sbRecs);
+      const sbHasCur=(sbRecs||[]).some(r=>r.id===curRecId);
+      const merged=sbHasCur ? sbRecs : (localCur ? [localCur,...(sbRecs||[])] : (sbRecs||[]));
       if(_lsOk){try{localStorage.setItem(LS_RECS,JSON.stringify(merged));}catch(e){}}
       _memRecs=merged;
       loadHistory(); // _memRecs 갱신 즉시 이력 목록 반영
