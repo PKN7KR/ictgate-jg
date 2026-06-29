@@ -1473,7 +1473,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
       <button class="sh-btn" onclick="_sheetAll(false)">전체해제</button>
       <button class="sh-btn pri" onclick="_sheetOk()">&#10003; 시작</button>
     </div>
-    <button id="sheet-close-btn" class="sh-btn" style="margin-top:6px;color:#888;border-color:#ccc;width:100%;" onclick="document.getElementById('ov-sheet').style.display='none'">✕ 닫기</button>
+    <button id="sheet-close-btn" class="sh-btn" style="margin-top:6px;color:#888;border-color:#ccc;width:100%;" onclick="_closeSheet()">✕ 닫기</button>
   </div>
   <!-- 카드형 현황표 -->
   <div class="sheet-card-box sheet-card-mode" style="display:none;">
@@ -1484,7 +1484,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
       </div>
       <div class="sheet-card-hdr-btns">
         <button id="eq-lock-btn-card" onclick="_toggleEqLock()" style="display:none;font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 10px;border-radius:16px;border:1.5px solid #059669;background:transparent;color:#4ade80;cursor:pointer;white-space:nowrap;">🔓잠금</button>
-        <button class="sheet-x-btn" onclick="document.getElementById('ov-sheet').style.display='none'">✕</button>
+        <button class="sheet-x-btn" onclick="_closeSheet()">✕</button>
       </div>
     </div>
     <div class="sheet-card-list" id="sheet-card-list"></div>
@@ -13041,6 +13041,9 @@ function openSheet(){
     tbody.appendChild(tr);
   }
   document.getElementById('ov-sheet').style.display='flex';
+  // 현황표 열릴 때 빠른촬영 FAB 숨김
+  const _shFab=document.getElementById('qc-fab');
+  if(_shFab) _shFab.style.display='none';
   // 카드형이면 buildSheetCard 호출
   if(_designMode==='card') buildSheetCard();
   // 클래식/카드형 표시 전환
@@ -13110,8 +13113,17 @@ function _sheetAll(on){
   bigos.forEach(function(b){b.textContent=on?'O':'-';b.style.color=on?'#059669':'';b.style.fontWeight=on?'700':'';});
   names.forEach(function(n){n.style.background=on?'#f0fdf4':'';});
 }
+function _closeSheet(){
+  document.getElementById('ov-sheet').style.display='none';
+  // 현황표 닫힐 때 빠른촬영 FAB 복원
+  const _shFab=document.getElementById('qc-fab');
+  if(_shFab&&curUser&&curUser.id!=='guest') _shFab.style.display='inline-flex';
+}
 function _sheetOk(){
   document.getElementById('ov-sheet').style.display='none';
+  // 현황표 닫힐 때 빠른촬영 FAB 복원
+  const _shFab2=document.getElementById('qc-fab');
+  if(_shFab2&&curUser&&curUser.id!=='guest') _shFab2.style.display='inline-flex';
   var cnt=document.querySelectorAll('.ecell.checked').length;
   if(!cnt){showToast('설비를 선택해주세요');return;}
   // 미체크 설비 숨김
