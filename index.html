@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.30</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.25</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1614,8 +1614,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     <div class="sb-new">
       <button class="sb-btn fill" onclick="newRec();closeSb()">+ 신규 점검표</button>
       <button class="sb-btn" onclick="resetForm()">양식 초기화</button>
-      <button class="sb-btn" id="dl-all-btn" onclick="downloadAllPhotos('maint')" style="border-color:var(--ok);color:var(--ok);margin-top:4px;font-size:14px;line-height:1.4">📦 유지보수 다운<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span></button>
-      <button class="sb-btn" id="dl-perf-btn" onclick="downloadAllPhotos('perf')" style="border-color:#3b82f6;color:#3b82f6;margin-top:2px;font-size:14px;line-height:1.4">📦 성능점검 다운<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span></button>
+      <button class="sb-btn" id="dl-all-btn" onclick="downloadAllPhotos()" style="border-color:var(--ok);color:var(--ok);margin-top:4px;font-size:14px;line-height:1.4">📦 압축다운<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span></button>
       <input type="file" id="restore-zip-inp" accept=".zip" style="display:none" onchange="restoreFromZip(this)">
     </div>
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;gap:4px">
@@ -4315,7 +4314,7 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
         if(!res2.ok){showToast('❌ 재시도 실패: '+res2.status,4000);return;}
         const data=await res2.json();
         const text=(data?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
-        if(text&&remEl){_setRemValue(remEl,'🤖 '+text.slice(0,80));remEl.classList.add('ai-filled');_remCache[remEl.id]='🤖 '+text.slice(0,80);remEl.dispatchEvent(new Event('input'));autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
+        if(text&&remEl){remEl.value=text.slice(0,80);remEl.dispatchEvent(new Event('input'));autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
         return;
       }
       showToast('❌ API 오류: '+res.status,4000);return;
@@ -4326,10 +4325,9 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
 
     if(text&&remEl){
       const _val=text.slice(0,80);
-      _setRemValue(remEl,'🤖 '+_val);
+      remEl.value='🤖 '+_val;
       remEl.classList.add('ai-filled');
-      _remCache[remEl.id]='🤖 '+_val;
-      remEl.dispatchEvent(new Event('input'));
+      _remCache[remEl.id]='🤖 '+_val; // 메모리 캐시에도 저장
       autoSave();
       showToast('✅ 비고 기입: '+_val.slice(0,20),3000);
     }
@@ -8605,26 +8603,14 @@ function getCoName(){
 function updateDlBtn(){
   const btn=document.getElementById('dl-all-btn');
   if(!btn)return;
-  // 유지보수/성능점검 각각 장수 계산
-  const seenM=new Set(), seenP=new Set();
-  Object.entries(photos).forEach(([rid,arr])=>{
-    arr.forEach(p=>{
-      if(rid.indexOf('__eq__p_')>=0) seenP.add(p.url);
-      else seenM.add(p.url);
-    });
-  });
-  const mCnt=seenM.size, pCnt=seenP.size;
-  btn.innerHTML=mCnt>0
-    ? `📦 유지보수 다운 (${mCnt}장)<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span>`
-    : `📦 유지보수 다운<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span>`;
-  btn.style.opacity=mCnt>0?'1':'0.4';
-  const perfBtn=document.getElementById('dl-perf-btn');
-  if(perfBtn){
-    perfBtn.innerHTML=pCnt>0
-      ? `📦 성능점검 다운 (${pCnt}장)<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span>`
-      : `📦 성능점검 다운<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span>`;
-    perfBtn.style.opacity=pCnt>0?'1':'0.4';
-  }
+  // 중복 제외 장수 계산 (url 기준)
+  const seen=new Set();
+  Object.values(photos).forEach(arr=>arr.forEach(p=>seen.add(p.url)));
+  const unique=seen.size;
+  btn.innerHTML=unique>0
+    ? `📦 압축다운 (${unique}장)<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span>`
+    : `📦 압축다운<br><span style="font-size:11px;font-weight:400;opacity:.8">(드롭박스 저장 및 내려받기)</span>`;
+  btn.style.opacity=unique>0?'1':'0.4';
 }
 
 // 전체 사진 ZIP으로 묶어서 1개 파일 다운로드 (IndexedDB 원본 사용)
@@ -8633,14 +8619,13 @@ function updateDlBtn(){
 //     백업데이터.json     ← 전체 레코드 (사진 메타 포함)
 //     사진/
 //       No.01_케이블설비.jpg ...
-async function downloadAllPhotos(tabFilter){
-  // tabFilter: 'maint'=유지보수, 'perf'=성능점검, undefined=전체
+async function downloadAllPhotos(){
+  // 전체 사진 수집 + 중복 제거 (rid 포함)
   const seen=new Set();
   const allPhotos=[];
   Object.entries(photos).forEach(([rid,arr])=>{
-    // 탭 필터 적용
-    if(tabFilter==='maint' && rid.indexOf('__eq__p_')>=0) return;
-    if(tabFilter==='perf' && rid.indexOf('__eq__p_')<0) return;
+    // p탭 rid는 m탭과 URL 중복 → 스킵
+    if(rid.indexOf('__eq__p_')>=0) return;
     arr.forEach(p=>{
       const key=p.idbKey||p.url;
       if(!seen.has(key)){seen.add(key);allPhotos.push({...p, _rid:rid});}
@@ -8657,7 +8642,7 @@ async function downloadAllPhotos(tabFilter){
     const zip=new JSZip();
     const coName=getCoName();
     // 현재 활성 탭에 따라 파일명 구분
-    const _activeTabZip=tabFilter||( document.getElementById('tb-p')?.classList.contains('act')?'perf':'maint');
+    const _activeTabZip=document.getElementById('tb-p')?.classList.contains('act')?'perf':'maint';
     const _zipSuffix=_activeTabZip==='perf'?'성능점검':'유지보수관리점검';
     const folder=zip.folder(coName);
     // 설비별 폴더 구조용 데이터
@@ -11354,8 +11339,7 @@ function copyShareUrl(){
 let _coworkTimer=null;
 let _coworkActive=false;
 let _coworkCode=''; // 현재 세션 공유 코드
-const COWORK_INTERVAL=10*1000; // 10초 고정 (공유작업 신뢰성 우선)
-const COWORK_INTERVAL_MULTI=10*1000;
+const COWORK_INTERVAL=10*1000; // 10초
 
 // 기기 고유 세션 ID (같은 계정이라도 기기를 구분하기 위해 사용)
 const _deviceSessionId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -11622,14 +11606,14 @@ function startCoworkPoll(){
   _coworkSave();
   // 로그인 직후 즉시 pull — 이력 바로 표시
   _coworkLoad().catch(()=>{});
-  // 10초 주기 pull (공유작업 실시간 동기화)
-  const _pollFn=async()=>{
+  // 1분 주기 pull
+  _coworkTimer=setInterval(async()=>{
     if(!curUser||curUser.id==='guest'){stopCoworkPoll();return;}
+    sysLog('[Cowork] 자동 동기화 (1분 주기)','info');
     _setCoworkStatus('syncing');
     await _coworkLoad();
-    await _coworkSave();
-  };
-  _coworkTimer=setInterval(_pollFn,COWORK_INTERVAL);
+    await _coworkSave(); // 내 변경사항도 공용 경로에 반영
+  }, COWORK_INTERVAL);
   // 화면 복귀 시 즉시 pull
   document.addEventListener('visibilitychange', _coworkVisHandler);
   _setCoworkStatus('ok');
