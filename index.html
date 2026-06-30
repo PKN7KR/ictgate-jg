@@ -1518,7 +1518,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.25</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.26</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8624,8 +8624,6 @@ async function downloadAllPhotos(){
   const seen=new Set();
   const allPhotos=[];
   Object.entries(photos).forEach(([rid,arr])=>{
-    // p탭 rid는 m탭과 URL 중복 → 스킵
-    if(rid.indexOf('__eq__p_')>=0) return;
     arr.forEach(p=>{
       const key=p.idbKey||p.url;
       if(!seen.has(key)){seen.add(key);allPhotos.push({...p, _rid:rid});}
@@ -8633,6 +8631,7 @@ async function downloadAllPhotos(){
   });
 
   if(allPhotos.length===0){showToast('저장된 사진이 없습니다');return;}
+  const _skipped=[]; // 다운로드 실패/URL없음 추적용 — 조용히 누락되지 않도록
 
   const btn=document.getElementById('dl-all-btn');
   if(btn){btn.disabled=true;btn.innerHTML='⏳ 원본 로딩 중...';}
@@ -8681,14 +8680,20 @@ async function downloadAllPhotos(){
     },null,2);
     folder.file(_zipSuffix+'_데이터.json', backupJson);
 
-    // ── 2. 사진 파일 수집 (설비별 폴더) ──
+    // ── 2. 사진 파일 수집 (설비별 폴더, m/p탭 하위 폴더로 분리하여 파일명 충돌 방지) ──
     let loaded=0;
+    let _fileIdx=0;
     for(const p of allPhotos){
+      _fileIdx++;
       // 설비 폴더명 결정
       const _rid=p._rid||'';
       const _eqName=_getEqName(_rid);
       const _safeEqName=_eqName.replace(/[\\/:*?"<>|]/g,'_');
-      const photoFolder=folder.folder('사진/'+_safeEqName);
+      const _tabSub=_rid.indexOf('__eq__p_')>=0?'성능점검':'유지보수';
+      const photoFolder=folder.folder('사진/'+_safeEqName+'/'+_tabSub);
+      // 파일명 앞에 전역 순번을 붙여 동일 폴더 내 이름 중복으로 인한 덮어쓰기를 원천 차단
+      const _safeName=(p.name||'사진').replace(/[\\/:*?"<>|]/g,'_');
+      const _outName=String(_fileIdx).padStart(4,'0')+'_'+_safeName;
 
       let origUrl=null;
       // ① 로컬 IDB 백업 우선 시도
@@ -8700,20 +8705,23 @@ async function downloadAllPhotos(){
         if(_match) origUrl=await idbGet(_match.idbKey).catch(()=>null);
       }
       const finalUrl=origUrl||p.srcUrl||p.url;
-      if(!finalUrl) continue;
+      if(!finalUrl){ _skipped.push(_safeName+' (원본 URL 없음)'); continue; }
       try{
         if(finalUrl.startsWith('data:')){
           const base64=finalUrl.split(',')[1];
-          if(base64) photoFolder.file(p.name,base64,{base64:true});
+          if(base64) photoFolder.file(_outName,base64,{base64:true});
+          else _skipped.push(_safeName+' (base64 손상)');
         } else {
           if(btn) btn.innerHTML=`⏳ 다운로드 중 ${loaded+1}/${allPhotos.length}`;
           const res=await fetch(finalUrl);
+          if(!res.ok) throw new Error('HTTP '+res.status);
           const blob2=await res.blob();
-          photoFolder.file(p.name,blob2);
+          photoFolder.file(_outName,blob2);
         }
         loaded++;
       }catch(e){
         console.warn('사진 로드 실패:',p.name,e.message);
+        _skipped.push(_safeName+' ('+e.message+')');
       }
       if(btn) btn.innerHTML=`⏳ 수집 중 ${loaded}/${allPhotos.length}`;
     }
@@ -8762,7 +8770,7 @@ async function downloadAllPhotos(){
 
     // ── 5. 결과 모달 표시 ──
     _showDownloadResult({
-      zipName,jsonName,loaded,
+      zipName,jsonName,loaded,total:allPhotos.length,skipped:_skipped,
       dbxFolderPath:_dbxFolderPath,
       dbxZipOk:_dbxZipOk,dbxJsonOk:_dbxJsonOk,
       dbxErrMsg:_dbxErrMsg,
@@ -8799,8 +8807,17 @@ async function downloadAllPhotos(){
 }
 
 /* ═══ 다운로드 결과 모달 ═══ */
-function _showDownloadResult({zipName,jsonName,loaded,dbxFolderPath,dbxZipOk,dbxJsonOk,dbxErrMsg,hasToken}){
+function _showDownloadResult({zipName,jsonName,loaded,total,skipped,dbxFolderPath,dbxZipOk,dbxJsonOk,dbxErrMsg,hasToken}){
   const _old=document.getElementById('dl-result-popup');if(_old)_old.remove();
+  const _skipList=skipped||[];
+  const _skipSection=_skipList.length>0?`
+    <div style="margin-top:10px;padding:10px;border-radius:6px;background:#fff5f5;border:1px solid #fecaca">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:#991b1b">⚠️ 누락된 사진 ${_skipList.length}장 — 확인 필요</div>
+      <div style="font-family:monospace;font-size:11px;line-height:1.6;color:#991b1b;max-height:120px;overflow-y:auto">
+        ${_skipList.slice(0,20).map(s=>'· '+s).join('<br>')}
+        ${_skipList.length>20?`<br>...외 ${_skipList.length-20}건`:''}
+      </div>
+    </div>`:'';
   const _dbxSection=hasToken?`
     <div style="margin-top:12px;padding:10px;border-radius:6px;background:${(dbxZipOk&&dbxJsonOk)?'#f0fdf4':'#fff5f5'};border:1px solid ${(dbxZipOk&&dbxJsonOk)?'#bbf7d0':'#fecaca'}">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">☁ Dropbox 업로드</div>
@@ -8827,16 +8844,19 @@ function _showDownloadResult({zipName,jsonName,loaded,dbxFolderPath,dbxZipOk,dbx
         <div style="font-weight:700;font-size:13px;margin-bottom:6px">💾 로컬 다운로드</div>
         <div style="font-family:monospace;font-size:12px;line-height:1.8;color:#166534">
           ✅ ${zipName}<br>
-          <span style="font-size:11px;color:#555">사진 ${loaded}장 포함</span>
+          <span style="font-size:11px;color:#555">사진 ${loaded}/${total||loaded}장 포함</span>
         </div>
       </div>
+      ${_skipSection}
       ${_dbxSection}
       <button onclick="document.getElementById('dl-result-popup').remove()"
         style="width:100%;margin-top:16px;padding:12px;border:none;background:#0a0a0a;color:#fff;border-radius:6px;font-size:15px;font-weight:700;cursor:pointer">확인</button>
     </div>`;
   document.body.appendChild(popup);
-  // 10초 후 자동 닫기
-  setTimeout(()=>{const p=document.getElementById('dl-result-popup');if(p)p.remove();},10000);
+  // 누락 항목 있으면 자동 닫힘 비활성화 (사용자가 직접 확인 후 닫도록)
+  if(_skipList.length===0){
+    setTimeout(()=>{const p=document.getElementById('dl-result-popup');if(p)p.remove();},10000);
+  }
 }
 
 /* ═══ Dropbox 탐색기 (superadmin 전용) ═══ */
