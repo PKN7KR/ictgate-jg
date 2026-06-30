@@ -1404,7 +1404,6 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
         <div style="font-family:var(--mono);font-size:11px;font-weight:700;margin-bottom:8px;color:#7c3aed">🗄 SUPABASE 마이그레이션</div>
         <div id="sb-migrate-log" style="font-family:monospace;font-size:11px;background:#fff;border:1px solid #e5e7eb;padding:8px;max-height:100px;overflow-y:auto;line-height:1.8;color:#333;margin-bottom:8px;border-radius:4px"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="bsm def" onclick="sbMigrateAll()" style="color:#7c3aed;border-color:#7c3aed">⬆ 로컬→Supabase</button>
           <button class="bsm def" onclick="sbMigrateCheck()" style="color:#059669;border-color:#059669">🔍 데이터 확인</button>
         </div>
       </div>
@@ -1518,7 +1517,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.26</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.27</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -5222,14 +5221,63 @@ async function sbDeleteRecord(id){
 }
 
 // ── 사진 저장 (photos 테이블) ──
+// 중복 방지: 동일한 (record_id, rid, url) 조합이 이미 있으면 재삽입하지 않음
+// 실패 시: 본인이 방금 시도한 이 사진 1건만 로컬 재시도 대기열에 기록 (다른 계정 데이터는 절대 건드리지 않음)
 async function sbSavePhoto(recId, rid, url, fileName){
   try{
-    await fetch(`${SB_URL}/rest/v1/photos`,{
+    const existing=await sbGet('photos',
+      `?record_id=eq.${encodeURIComponent(recId)}&rid=eq.${encodeURIComponent(rid)}&url=eq.${encodeURIComponent(url)}&select=id&limit=1`);
+    if(existing&&existing.length>0){
+      sysLog('[SB] 사진 이미 존재 — 재삽입 스킵: '+(fileName||''),'info');
+      return;
+    }
+  }catch(e){
+    // 중복 체크 자체가 실패하면(네트워크 등) 안전하게 저장 시도는 계속 진행
+    sysLog('[SB] 중복 체크 실패(계속 진행): '+e.message,'warn');
+  }
+  try{
+    const res=await fetch(`${SB_URL}/rest/v1/photos`,{
       method:'POST',
       headers:{...SB_HEADERS,'Prefer':'return=minimal'},
       body:JSON.stringify({record_id:recId, rid:rid, url:url, file_name:fileName||''})
     });
-  }catch(e){sysLog('[SB] 사진 저장 실패: '+e.message,'warn');}
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    _removeFromPhotoRetryQueue(recId, rid, url);
+  }catch(e){
+    sysLog('[SB] 사진 저장 실패 → 재시도 대기열 등록: '+e.message,'warn');
+    _queuePhotoRetry(recId, rid, url, fileName);
+  }
+}
+
+// ── 사진 저장 실패 시 재시도 대기열 (본인 기기/계정 범위에서만 동작 — localStorage 기반) ──
+function _queuePhotoRetry(recId, rid, url, fileName){
+  if(!_lsOk) return;
+  let q=[];
+  try{q=JSON.parse(localStorage.getItem('ICT_photoRetryQ')||'[]');}catch(e){}
+  // 동일 항목 중복 등록 방지
+  if(q.some(it=>it.recId===recId&&it.rid===rid&&it.url===url)) return;
+  q.push({recId, rid, url, fileName, ts:Date.now()});
+  try{localStorage.setItem('ICT_photoRetryQ', JSON.stringify(q.slice(-200)));}catch(e){}
+}
+function _removeFromPhotoRetryQueue(recId, rid, url){
+  if(!_lsOk) return;
+  try{
+    let q=JSON.parse(localStorage.getItem('ICT_photoRetryQ')||'[]');
+    q=q.filter(it=>!(it.recId===recId&&it.rid===rid&&it.url===url));
+    localStorage.setItem('ICT_photoRetryQ', JSON.stringify(q));
+  }catch(e){}
+}
+// 대기열에 쌓인 실패 건만 정확히 재시도 (본인이 만든 항목만 — 다른 계정 데이터 절대 미포함)
+async function _retryQueuedPhotos(){
+  if(!_lsOk) return;
+  let q=[];
+  try{q=JSON.parse(localStorage.getItem('ICT_photoRetryQ')||'[]');}catch(e){return;}
+  if(!q.length) return;
+  sysLog('[SB] 재시도 대기열 처리: '+q.length+'건','info');
+  for(const item of q.slice(0,20)){ // 한 번에 과도하게 몰리지 않도록 상한
+    try{ await sbSavePhoto(item.recId, item.rid, item.url, item.fileName); }
+    catch(e){ /* sbSavePhoto 내부에서 이미 재등록 처리됨 */ }
+  }
 }
 
 // ── 사진 목록 불러오기 (recId 기준) ──
@@ -6081,20 +6129,10 @@ async function enterApp(user){
     _checkNaverBrowser(); // 네이버 브라우저 안내
     // Supabase 계정 동기화 (백그라운드)
     _sbSyncAccounts().catch(()=>{});
-    // 첫 로그인 시 자동 마이그레이션 (Supabase에 데이터 없으면 로컬 자동 업로드)
-    if(user.id!=='guest'){
-      setTimeout(async()=>{
-        try{
-          const sbRecs=await sbLoadRecords();
-          const localRecs=lsGet();
-          if(sbRecs.length===0 && localRecs.length>0){
-            sysLog('[AutoMigrate] Supabase 데이터 없음 → 자동 마이그레이션 시작','info');
-            await sbMigrateAll();
-            showToast('☁ 로컬 데이터를 Supabase에 자동 업로드했습니다',3000);
-          }
-        }catch(e){sysLog('[AutoMigrate] 실패: '+e.message,'warn');}
-      }, 3000);
-    }
+    // [제거됨] 자동 마이그레이션 — sbMigrateAll은 캐시에 있는 모든 레코드(superadmin의 경우 타 계정 포함)를
+    // 무조건 재삽입하는 위험한 동작이라 자동 실행을 제거함.
+    // 사진 저장은 addPhoto() 시점에 sbSavePhoto()로 1건씩 실시간 저장되며,
+    // 실패한 사진은 재시도 대기열(_queuePhotoRetry)에 본인 것만 기록되어 _coworkLoad에서 자동 재시도됨.
     // 세션 하트비트 시작 (10분마다 갱신 — 중복 로그인 방지)
     _startSessionHeartbeat(user.id, user.role);
     // Supabase 자동 동기화 시작 (QR 없이도 10초마다 자동 pull)
@@ -11488,6 +11526,8 @@ function _coworkMerge(local, remote){
 async function _coworkLoad(){
   if(!_coworkActive) return;
   try{
+    // 실패했던 본인 사진 재시도 (다른 계정 데이터는 포함되지 않음)
+    _retryQueuedPhotos().catch(()=>{});
     const sbRecs=await sbLoadRecords();
     // Supabase가 진실의 원천 — _memRecs와 localStorage 캐시 항상 갱신
     // 단, 현재 작업 중인 레코드(curRecId)가 Supabase에 아직 없으면(저장 중) 로컬 것 보존
@@ -12376,56 +12416,16 @@ async function _retryBase64Uploads(){
   }
 }
 
-/* ── Supabase 마이그레이션 도구 ── */
+/* ── Supabase 마이그레이션 도구 ──
+   [주의] sbMigrateAll()은 2026-06-30 안전성 문제로 완전 제거됨:
+   - lsGet()이 반환하는 모든 레코드(superadmin의 경우 타 계정 레코드 포함)를 대상으로
+   - sbSavePhoto()를 중복 체크 없이 반복 호출하여 사진이 기하급수적으로 증식되는 버그의 원인이었음
+   - 정상적인 사진 저장은 addPhoto() → sbSavePhoto()(중복체크+재시도대기열 내장)로 충분히 처리됨
+   - 데이터 확인(읽기 전용)이 필요하면 sbMigrateCheck() 사용
+*/
 function _sbMigrateLog(msg){
   const el=document.getElementById('sb-migrate-log');
   if(el) el.innerHTML+=`<div>[${new Date().toLocaleTimeString('ko-KR')}] ${msg}</div>`;
-}
-
-async function sbMigrateAll(){
-  const el=document.getElementById('sb-migrate-log');
-  if(el) el.innerHTML='';
-  _sbMigrateLog('⏳ 마이그레이션 시작...');
-
-  // 1. 레코드 전체 업로드
-  const recs=lsGet();
-  _sbMigrateLog(`📋 로컬 레코드: ${recs.length}건`);
-  let recOk=0, recFail=0;
-  for(const r of recs){
-    try{
-      await sbSaveRecord(r);
-      recOk++;
-    }catch(e){ recFail++; }
-  }
-  _sbMigrateLog(`✅ 레코드 업로드: ${recOk}건 성공, ${recFail}건 실패`);
-
-  // 2. 사진 URL 업로드
-  let photoOk=0, photoFail=0;
-  for(const r of recs){
-    try{
-      const ph=_memPhotos[r.id]||{}; // Supabase stub — 메모리 캐시
-      if(!ph||!Object.keys(ph).length) continue;
-      for(const [rid, arr] of Object.entries(ph)){
-        for(const p of (arr||[])){
-          const url=p.url||p.srcUrl||p.thumb;
-          if(url&&url.includes('cloudinary.com')){
-            await sbSavePhoto(r.id, rid, url, p.name||'사진');
-            photoOk++;
-          }
-        }
-      }
-    }catch(e){ photoFail++; }
-  }
-  _sbMigrateLog(`📸 사진 업로드: ${photoOk}장 성공, ${photoFail}장 실패`);
-
-  // 3. 계정 업로드
-  try{
-    const accts=loadAccounts();
-    await sbSaveAccounts(accts);
-    _sbMigrateLog(`👤 계정 업로드: ${accts.length}명`);
-  }catch(e){ _sbMigrateLog(`❌ 계정 업로드 실패: ${e.message}`); }
-
-  _sbMigrateLog('🎉 마이그레이션 완료!');
 }
 
 async function sbMigrateCheck(){
