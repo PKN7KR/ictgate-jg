@@ -1517,7 +1517,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.27</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.29</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1631,6 +1631,10 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     <div class="tab-bar" style="display:flex;align-items:center;gap:4px">
       <button class="tb act" id="tb-m" onclick="switchTab('maint')" style="transition:all .2s;white-space:nowrap">① 유지보수·관리 <span style="font-size:8px;opacity:.4">[별지 제2호]</span></button>
       <button class="tb" id="tb-p" onclick="switchTab('perf')" style="transition:all .2s;white-space:nowrap">② 성능점검 <span style="font-size:8px;opacity:.4">[별지 제3호]</span></button>
+      <button id="ai-analyze-btn" onclick="startAiAnalysis()"
+        style="margin-left:auto;flex-shrink:0;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-family:var(--sans);cursor:pointer;white-space:nowrap;display:none">
+        🤖 AI 분석
+      </button>
     </div>
     <!-- 설비 검색 — 탭바 아래 (tab-bar sticky에 포함) -->
     <div id="eq-search-wrap" style="position:sticky;top:calc(var(--brand-h) + var(--nav-h) + var(--tab-h));z-index:199;background:var(--wh);padding:4px 8px 6px;border-bottom:1px solid var(--br)">
@@ -4155,7 +4159,7 @@ ${itemList.map((it,i)=>`${i+1}. ${it}`).join('\n')}
         if(!blk||blk.id!=='blk_'+pfx+'_'+secId)return;
         // 항목명 매칭 (포함 여부)
         if(itemText.includes(r.item.slice(0,8))||r.item.includes(itemText.slice(0,8))){
-          if(!inp.value){inp.value=r.value;filled++;}
+          if(!_getRemValue(inp)){_setRemValue(inp,r.value);inp.classList.add('ai-filled');const _rk=inp.id?inp.id.replace('rem_',''):'';if(_rk)_remCache[_rk]=r.value;filled++;}
         }
       });
     });
@@ -4163,8 +4167,11 @@ ${itemList.map((it,i)=>`${i+1}. ${it}`).join('\n')}
     // 매칭 안 된 값들은 설비 첫 비고란에 종합 기입
     if(filled===0){
       const firstRem=document.querySelector('#blk_'+pfx+'_'+secId+' .rem-inp');
-      if(firstRem&&!firstRem.value){
-        firstRem.value=results.map(r=>r.value).filter(Boolean).join(' / ').slice(0,100);
+      if(firstRem&&!_getRemValue(firstRem)){
+        const _combined=results.map(r=>r.value).filter(Boolean).join(' / ').slice(0,200);
+        _setRemValue(firstRem,_combined);firstRem.classList.add('ai-filled');
+        const _rk=firstRem.id?firstRem.id.replace('rem_',''):'';
+        if(_rk)_remCache[_rk]=_combined;
         filled=1;
       }
     }
@@ -4313,7 +4320,7 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
         if(!res2.ok){showToast('❌ 재시도 실패: '+res2.status,4000);return;}
         const data=await res2.json();
         const text=(data?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
-        if(text&&remEl){remEl.value=text.slice(0,80);remEl.dispatchEvent(new Event('input'));autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
+        if(text&&remEl){_setRemValue(remEl,text.slice(0,80));remEl.classList.add('ai-filled');_remCache[remEl.id.replace('rem_','')]=text.slice(0,80);autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
         return;
       }
       showToast('❌ API 오류: '+res.status,4000);return;
@@ -4324,9 +4331,9 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
 
     if(text&&remEl){
       const _val=text.slice(0,80);
-      remEl.value='🤖 '+_val;
+      _setRemValue(remEl,'🤖 '+_val);
       remEl.classList.add('ai-filled');
-      _remCache[remEl.id]='🤖 '+_val; // 메모리 캐시에도 저장
+      _remCache[remEl.id.replace('rem_','')]='🤖 '+_val; // 메모리 캐시에도 저장
       autoSave();
       showToast('✅ 비고 기입: '+_val.slice(0,20),3000);
     }
@@ -4338,6 +4345,337 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
     }
   }finally{
     if(btn){btn.textContent='🔍';btn.disabled=false;}
+  }
+}
+
+// ── AI 분석 버튼 표시/숨김 제어 ──
+// Gemini 키 있고 레코드 열려있을 때만 표시
+function _updateAiBtn(){
+  const btn=document.getElementById('ai-analyze-btn');
+  if(!btn) return;
+  const hasKey=!!getGeminiKey();
+  const hasRec=!!curRecId;
+  btn.style.display=(hasKey&&hasRec)?'block':'none';
+}
+
+// ── AI 분석 잠금 키 상수 ──
+const AI_LOCK_KEY='ai_analysis';
+
+// ── AI 분석 잠금 상태 확인 ──
+async function _checkAiLock(){
+  try{
+    const rows=await sbGet('locks',
+      `?record_id=eq.${curRecId}&eq_key=eq.${AI_LOCK_KEY}&select=device_id,user_name,locked_at`);
+    if(!rows||!rows.length) return {locked:false};
+    const row=rows[0];
+    const age=Date.now()-new Date(row.locked_at).getTime();
+    if(age>LOCK_TIMEOUT_MS){
+      // 만료된 잠금 자동 해제
+      await sbDelete('locks',`?record_id=eq.${curRecId}&eq_key=eq.${AI_LOCK_KEY}`);
+      return {locked:false};
+    }
+    const isMine=row.device_id===_deviceSessionId;
+    return {locked:true, isMine, by:row.user_name, lockedAt:row.locked_at};
+  }catch(e){ return {locked:false}; }
+}
+
+// ── AI 분석 잠금 등록 ──
+async function _acquireAiLock(){
+  try{
+    // 먼저 현재 상태 확인
+    const state=await _checkAiLock();
+    if(state.locked && !state.isMine) return false; // 다른 사람이 실행 중
+    await sbUpsert('locks',{
+      record_id:curRecId,
+      eq_key:AI_LOCK_KEY,
+      device_id:_deviceSessionId,
+      user_name:curUser?.name||curUser?.id||'작업자',
+      locked_at:new Date().toISOString()
+    });
+    return true;
+  }catch(e){ sysLog('[AILock] 잠금 실패: '+e.message,'warn'); return false; }
+}
+
+// ── AI 분석 잠금 해제 ──
+async function _releaseAiLock(){
+  try{
+    await sbDelete('locks',
+      `?record_id=eq.${curRecId}&eq_key=eq.${AI_LOCK_KEY}&device_id=eq.${_deviceSessionId}`);
+  }catch(e){ sysLog('[AILock] 해제 실패: '+e.message,'warn'); }
+}
+
+// ── 버튼 상태 업데이트 ──
+function _setAiBtn(state, text){
+  const btn=document.getElementById('ai-analyze-btn');
+  if(!btn) return;
+  btn.textContent=text;
+  if(state==='ready'){
+    btn.style.background='#7c3aed';
+    btn.disabled=false;
+    btn.style.opacity='1';
+    btn.style.cursor='pointer';
+  } else if(state==='running'){
+    btn.style.background='#5b21b6';
+    btn.disabled=true;
+    btn.style.opacity='.8';
+    btn.style.cursor='not-allowed';
+  } else if(state==='waiting'){
+    btn.style.background='#6b7280';
+    btn.disabled=true;
+    btn.style.opacity='.8';
+    btn.style.cursor='not-allowed';
+  } else if(state==='done'){
+    btn.style.background='#059669';
+    btn.disabled=false;
+    btn.style.opacity='1';
+    btn.style.cursor='pointer';
+  }
+}
+
+// ── 메인 진입점: AI 분석 시작 버튼 클릭 ──
+async function startAiAnalysis(){
+  if(!getGeminiKey()){ showToast('⚠️ Gemini API 키를 먼저 설정하세요',3000); return; }
+  if(!curRecId){ showToast('⚠️ 레코드를 먼저 열어주세요',3000); return; }
+
+  // 잠금 상태 확인
+  const lockState=await _checkAiLock();
+  if(lockState.locked && !lockState.isMine){
+    // 다른 사람이 실행 중
+    const who=lockState.by||'다른 작업자';
+    _setAiBtn('waiting', `⏳ ${who} 분석 중`);
+    showToast(`⏳ ${who}가 AI 분석 중입니다. 완료 후 다시 눌러주세요.`, 5000);
+    // 15초마다 상태 재확인
+    setTimeout(async()=>{
+      const st=await _checkAiLock();
+      if(!st.locked) _setAiBtn('ready','🤖 AI 분석');
+    }, 15000);
+    return;
+  }
+
+  // 잠금 획득 시도
+  const acquired=await _acquireAiLock();
+  if(!acquired){
+    showToast('⚠️ 잠금 획득 실패 — 잠시 후 다시 시도해주세요',3000);
+    return;
+  }
+
+  // 분석 시작
+  _aiAutoLastRun=0; // 타이머 리셋 → 즉시 실행
+  _setAiBtn('running','🤖 분석 중...');
+  sysLog('[AI] 수동 분석 시작','info');
+
+  try{
+    await aiAutoScanAndFill();
+    _setAiBtn('done','✅ 분석 완료');
+    showToast('✅ AI 계측기 분석 완료',3000);
+    setTimeout(()=>_setAiBtn('ready','🤖 AI 분석'),5000);
+  }catch(e){
+    sysLog('[AI] 분석 오류: '+e.message,'warn');
+    _setAiBtn('ready','🤖 AI 분석');
+    showToast('❌ AI 분석 오류: '+e.message,4000);
+  }finally{
+    await _releaseAiLock();
+  }
+}
+
+
+/* AI 자동 계측기 분석 - 항목 추가 시 AI_METER_ITEMS 배열에 한 줄만 추가 */
+
+// ── 계측기 항목명 ↔ AI 프롬프트 매핑 테이블 ──
+// keyword: 점검항목명에 포함되면 매칭 (부분 일치)
+// prompt: Gemini에 전달할 지시문 (읽어야 할 값 형식 안내)
+// multi: true = 설비 내 사진 전부 분석해서 합쳐서 넣음
+const AI_METER_ITEMS = [
+  {
+    keyword: '접지저항 측정',
+    prompt: '이 사진에서 접지저항계의 측정값을 읽어서 수치와 단위만 반환하세요. (예: 0.411Ω) 계측기가 없으면 "없음"만 반환.',
+    multi: false
+  },
+  {
+    keyword: '설치 환경 확인',
+    prompt: '이 사진에서 온습도계의 측정값을 읽어서 수치와 단위만 반환하세요. (예: 습도 47.3%, 온도 23.9°C) 계측기가 없으면 "없음"만 반환.',
+    multi: false
+  },
+  {
+    keyword: '이상 발열 및 소음',
+    prompt: '이 사진에서 소음계 또는 적외선 온도계의 측정값을 읽어서 수치와 단위만 반환하세요. (예: 62.1dB 또는 22.9°C) 계측기가 없으면 "없음"만 반환.',
+    multi: true
+  },
+  {
+    keyword: 'RF카드 자기장',
+    prompt: '이 사진에서 TRIFIELD EMF 측정기의 수치를 읽어서 값과 단위만 반환하세요. (예: 0.8mG 또는 7151mW/m²) 계측기가 없으면 "없음"만 반환.',
+    multi: true
+  },
+  {
+    keyword: 'AC 및 DC 입력 전원',
+    prompt: '이 사진에서 클램프 미터의 전압 수치를 읽어서 값과 단위만 반환하세요. (예: 226.5V) 계측기가 없으면 "없음"만 반환.',
+    multi: false
+  },
+  {
+    keyword: '입 출력 전압',
+    prompt: 'UPS LCD 화면의 모든 수치를 읽어서 텍스트만 반환하세요. (예: AC IN 228V, OUTPUT 221V, BATTERY 213V, LOAD 23%) 화면이 없으면 "없음"만 반환.',
+    multi: true
+  },
+];
+
+// ── 자동 스캔 상태 관리 ──
+let _aiAutoRunning = false;   // 중복 실행 방지
+let _aiAutoLastRun = 0;       // 마지막 실행 시각 (30초 간격 조절)
+let _aiAutoQueue = [];        // 처리 대기 목록 [{rid, itemText, prompt, photos}]
+
+// ── 핵심: 사진 1장(또는 여러장)을 Gemini에 던져 수치를 읽어오는 함수 ──
+async function _aiReadMeter(photoUrls, prompt){
+  const key = getGeminiKey();
+  if(!key || !photoUrls.length) return null;
+
+  // 이미지 base64 변환 (여러 장이면 전부 parts에 포함)
+  const parts = [{text: prompt}];
+  for(const url of photoUrls.slice(0, 6)){ // 최대 6장
+    try{
+      const res = await fetch(url);
+      if(!res.ok) continue;
+      const blob = await res.blob();
+      const b64 = await new Promise(resolve=>{
+        const r = new FileReader();
+        r.onload = ()=>resolve(r.result.split(',')[1]);
+        r.readAsDataURL(blob);
+      });
+      parts.push({inlineData:{data:b64, mimeType:blob.type||'image/jpeg'}});
+    }catch(e){ continue; }
+  }
+  if(parts.length < 2) return null; // 이미지 로드 실패
+
+  const body = {
+    contents:[{parts}],
+    generationConfig:{temperature:0.1, maxOutputTokens:150}
+  };
+
+  try{
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
+      {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(30000)}
+    );
+    if(res.status===429){
+      // 429 — 5초 대기 후 재시도 1회
+      await new Promise(r=>setTimeout(r,5000));
+      const res2 = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
+        {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(30000)}
+      );
+      if(!res2.ok) return null;
+      const d2 = await res2.json();
+      return (d2?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim()||null;
+    }
+    if(!res.ok) return null;
+    const data = await res.json();
+    return (data?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim()||null;
+  }catch(e){ return null; }
+}
+
+// ── 비고란에 AI 결과 기입 (기존값 있으면 절대 덮어쓰지 않음) ──
+function _aiSetRem(rid, value){
+  if(!value || value==='없음' || value==='해당없음') return false;
+  const el = document.getElementById('rem_'+rid);
+  // DOM에 있는 경우 — 직접 기입
+  if(el){
+    if(_getRemValue(el)) return false; // 이미 값 있으면 스킵
+    _setRemValue(el, value);
+    el.classList.add('ai-filled');
+  }
+  // _remCache에도 기록 (DOM에 없어도 serialize()에 포함되도록)
+  const key = rid;
+  if(_remCache[key]) return false; // 캐시에도 이미 있으면 스킵
+  _remCache[key] = value;
+  autoSave();
+  return true;
+}
+
+// ── 메인: 현재 레코드에서 계측기 항목 스캔 → 자동 분석 ──
+async function aiAutoScanAndFill(){
+  if(_aiAutoRunning) return;  // 중복 실행 방지
+  if(!getGeminiKey()) return; // API 키 없으면 스킵
+  if(!curRecId) return;
+
+  const now = Date.now();
+  // 30초 간격 유지
+  if(now - _aiAutoLastRun < 30000) return;
+  _aiAutoLastRun = now;
+  _aiAutoRunning = true;
+
+  try{
+    // 현재 레코드의 모든 rem-inp 순회
+    const allRems = document.querySelectorAll('[id^="rem_"]');
+    if(!allRems.length){ _aiAutoRunning=false; return; }
+
+    // 처리 대상 수집
+    const targets = [];
+    allRems.forEach(remEl=>{
+      // 이미 값 있으면 스킵
+      if(_getRemValue(remEl)) return;
+      // _remCache에도 이미 있으면 스킵
+      const rid = remEl.id.replace('rem_','');
+      if(_remCache[rid]) return;
+
+      // 점검항목명 가져오기
+      const row = remEl.closest('tr');
+      if(!row) return;
+      const itemText = row.querySelector('.tdit')?.textContent.trim()||'';
+      if(!itemText) return;
+
+      // AI_METER_ITEMS에서 매칭되는 항목 찾기
+      const matched = AI_METER_ITEMS.find(m=>itemText.includes(m.keyword));
+      if(!matched) return;
+
+      // 해당 rid의 사진이 있는지 확인
+      const ridPhotos = photos[rid]||[];
+      if(!ridPhotos.length) return;
+
+      targets.push({rid, itemText, matched, ridPhotos});
+    });
+
+    if(!targets.length){ _aiAutoRunning=false; return; }
+
+    // 처리 대상이 있을 때 상태 표시
+    sysLog(`[AI Auto] 계측기 자동 분석 시작: ${targets.length}건`, 'info');
+
+    // 5초 간격으로 하나씩 처리 (15RPM 안전하게 유지)
+    for(let i=0; i<targets.length; i++){
+      const {rid, itemText, matched, ridPhotos} = targets[i];
+
+      // 처리 직전에 다시 한번 비어있는지 확인 (앞 순서에서 채워졌을 수 있음)
+      const remEl = document.getElementById('rem_'+rid);
+      if(remEl && _getRemValue(remEl)) continue;
+      if(_remCache[rid]) continue;
+
+      // 사진 URL 수집
+      const photoUrls = ridPhotos
+        .map(p=>p.url||p.srcUrl)
+        .filter(Boolean)
+        .filter(u=>u.startsWith('http')); // base64 제외 (Gemini URL 직접 접근)
+
+      if(!photoUrls.length) continue;
+
+      // multi=false면 마지막 사진 1장만, multi=true면 전부
+      const useUrls = matched.multi ? photoUrls : [photoUrls[photoUrls.length-1]];
+
+      const result = await _aiReadMeter(useUrls, matched.prompt);
+
+      if(result && result!=='없음' && result!=='해당없음'){
+        const filled = _aiSetRem(rid, result);
+        if(filled){
+          sysLog(`[AI Auto] ✅ ${itemText.slice(0,15)} → ${result.slice(0,20)}`, 'info');
+        }
+      }
+
+      // 마지막 항목이 아니면 5초 대기
+      if(i < targets.length-1){
+        await new Promise(r=>setTimeout(r,5000));
+      }
+    }
+  }catch(e){
+    sysLog('[AI Auto] 오류: '+e.message, 'warn');
+  }finally{
+    _aiAutoRunning = false;
   }
 }
 
@@ -7290,6 +7628,11 @@ async function loadRec(r){
   lsSave(serialize());
   // 사진 로드 완료 후 이력 장수 즉시 갱신
   loadHistory();
+  // AI 분석 버튼 표시 (Gemini 키 있을 때만)
+  _updateAiBtn();
+  // 새 레코드 열 때 AI 잠금 리셋 (이전 잠금 내 것이면 해제)
+  _releaseAiLock().catch(()=>{});
+  _setAiBtn('ready','🤖 AI 분석');
 }
 async function delRec(id){
   // 이력 정보 확인
@@ -11526,8 +11869,10 @@ function _coworkMerge(local, remote){
 async function _coworkLoad(){
   if(!_coworkActive) return;
   try{
-    // 실패했던 본인 사진 재시도 (다른 계정 데이터는 포함되지 않음)
+    // 실패했던 본인 사진 재시도
     _retryQueuedPhotos().catch(()=>{});
+    // AI 계측기 자동 분석 (30초 간격, Gemini 키 있을 때만)
+    // AI 자동 분석은 버튼으로만 실행 (백그라운드 자동 실행 제거)
     const sbRecs=await sbLoadRecords();
     // Supabase가 진실의 원천 — _memRecs와 localStorage 캐시 항상 갱신
     // 단, 현재 작업 중인 레코드(curRecId)가 Supabase에 아직 없으면(저장 중) 로컬 것 보존
