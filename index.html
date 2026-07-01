@@ -1517,7 +1517,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.32</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.34</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4523,7 +4523,7 @@ const AI_METER_ITEMS = [
     multi: false
   },
   {
-    keyword: '입 출력 전압',
+    keyword: '입ㆍ출력 전압',
     prompt: 'UPS LCD 화면의 모든 수치를 읽어서 텍스트만 반환하세요. (예: AC IN 228V, OUTPUT 221V, BATTERY 213V, LOAD 23%) 화면이 없으면 "없음"만 반환.',
     multi: true
   },
@@ -4662,6 +4662,8 @@ async function aiAutoScanAndFill(){
     }
 
     sysLog(`[AI Auto] 계측기 자동 분석 시작: ${targets.length}건`, 'info');
+    let filled=0, skipped=0;
+    const skippedList=[]; // 수치 못 읽은 항목 목록
 
     for(let i=0; i<targets.length; i++){
       const {eqRid, itemText, matched, photoUrls, remEl, remKey} = targets[i];
@@ -4677,12 +4679,22 @@ async function aiAutoScanAndFill(){
       const result = await _aiReadMeter(useUrls, matched.prompt);
 
       if(result && result!=='없음' && result!=='해당없음'){
-        _setRemValue(remEl, result);
-        remEl.classList.add('ai-filled');
+        // DOM에 직접 쓰기 (현재 탭이 열려있으면 즉시 반영)
+        if(remEl && !_getRemValue(remEl)){
+          _setRemValue(remEl, result);
+          remEl.classList.add('ai-filled');
+        }
+        // _remCache에 저장 (탭 전환해도 누락 없음 — mkRow 렌더링 시 자동 반영)
         if(remKey) _remCache[remKey] = result;
         autoSave();
+        filled++;
         sysLog(`[AI Auto] ✅ ${itemText.slice(0,15)} → ${result.slice(0,20)}`, 'info');
       } else {
+        skipped++;
+        // 설비명 추출 (blk 헤더에서)
+        const blk2=document.getElementById('blk_'+(eqRid.includes('__eq__m_')?'m':'p')+'_'+eqRid.replace('__eq__m_','').replace('__eq__p_',''));
+        const eqName=blk2?blk2.querySelector('.eq-name,.blk-title,.iblock-title')?.textContent.trim()||eqRid:eqRid;
+        skippedList.push({eqName, itemText});
         sysLog(`[AI Auto] ⬜ ${itemText.slice(0,15)} → 수치 없음`, 'info');
       }
 
@@ -4692,9 +4704,77 @@ async function aiAutoScanAndFill(){
     }
   }catch(e){
     sysLog('[AI Auto] 오류: '+e.message, 'warn');
+    showToast('❌ AI 분석 오류: '+e.message, 4000);
   }finally{
     _aiAutoRunning = false;
+    if(typeof filled!=='undefined'){
+      _showAiResultPopup(filled, skipped, skippedList||[]);
+    }
   }
+}
+
+// ── AI 분석 완료 결과 팝업 ──
+function _showAiResultPopup(filled, skipped, skippedList){
+  const old=document.getElementById('ai-result-popup');
+  if(old) old.remove();
+
+  const popup=document.createElement('div');
+  popup.id='ai-result-popup';
+  popup.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+  const box=document.createElement('div');
+  box.style.cssText='background:#fff;border-radius:14px;padding:20px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;font-family:var(--sans)';
+
+  // 제목
+  const title=document.createElement('div');
+  title.style.cssText='font-weight:700;font-size:17px;margin-bottom:14px;color:#1a1a1a';
+  title.textContent='🤖 AI 계측기 분석 완료';
+
+  // 요약
+  const summary=document.createElement('div');
+  summary.style.cssText='background:#f0fdf4;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:2';
+  summary.innerHTML=`
+    <div>✅ <b>입력 완료</b>: ${filled}건</div>
+    <div>⬜ <b>수치 미인식</b>: ${skipped}건 (계측기 미촬영 또는 사진 불명확)</div>
+  `;
+
+  box.appendChild(title);
+  box.appendChild(summary);
+
+  // 미입력 목록
+  if(skippedList && skippedList.length>0){
+    const subTitle=document.createElement('div');
+    subTitle.style.cssText='font-weight:700;font-size:13px;color:#991b1b;margin-bottom:8px';
+    subTitle.textContent='⚠️ 수동 확인 필요 항목';
+    box.appendChild(subTitle);
+
+    const list=document.createElement('div');
+    list.style.cssText='background:#fff5f5;border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.8;color:#7f1d1d;max-height:200px;overflow-y:auto;margin-bottom:14px';
+    skippedList.slice(0,30).forEach(item=>{
+      const row=document.createElement('div');
+      row.textContent='· '+item.itemText.slice(0,30);
+      list.appendChild(row);
+    });
+    if(skippedList.length>30){
+      const more=document.createElement('div');
+      more.style.cssText='color:#999;margin-top:4px';
+      more.textContent='...외 '+(skippedList.length-30)+'건';
+      list.appendChild(more);
+    }
+    box.appendChild(list);
+  }
+
+  // 확인 버튼
+  const confirmBtn=document.createElement('button');
+  confirmBtn.textContent='확인';
+  confirmBtn.style.cssText='width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--sans)';
+  confirmBtn.onclick=()=>popup.remove();
+  box.appendChild(confirmBtn);
+
+  popup.appendChild(box);
+  // 팝업 외부 클릭 시 닫기
+  popup.onclick=(e)=>{ if(e.target===popup) popup.remove(); };
+  document.body.appendChild(popup);
 }
 
 /* ═══════════════════════════════════════════
@@ -8719,12 +8799,12 @@ function mkRow(rid,num,item,pfx){
       <button class="ai-rem-btn" title="사진 선택 후 AI 비고 자동기입"
         onclick="aiPickPhoto('${rid}','${pfx}')"
         style="flex-shrink:0;background:#7c3aed;color:#fff;border:none;border-radius:4px;padding:5px 8px;font-size:14px;cursor:pointer;white-space:nowrap;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center">🔍</button>
-      <div class="rem-inp" id="rem_${rid}" contenteditable="true" role="textbox"
+      <div class="rem-inp${_remCache[rid]?' ai-filled':''}" id="rem_${rid}" contenteditable="true" role="textbox"
         data-placeholder="비고..."
         style="flex:1;min-width:0;min-height:1.4em;word-break:break-all;padding:3px 4px;border:none;border-bottom:1px solid rgba(128,128,128,.3);outline:none;font-size:14px;font-family:var(--sans);background:transparent;color:inherit;cursor:text;"
         onfocus="this.style.borderBottom='2px solid #7c3aed';this.closest('tr').classList.add('row-active')"
         onblur="this.style.borderBottom='1px solid rgba(128,128,128,.3)';if(!this.textContent.trim())this.closest('tr').classList.remove('row-active');_onRemDivBlur('${rid}','${pfx}')"
-        oninput="_onRemDivInput('${rid}','${pfx}')"></div>
+        oninput="_onRemDivInput('${rid}','${pfx}')">${_remCache[rid]?_remCache[rid]:''}</div>
     </td>`;
   return tr;
 }
