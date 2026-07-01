@@ -1517,7 +1517,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.31</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.32</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4534,27 +4534,22 @@ let _aiAutoRunning = false;   // 중복 실행 방지
 let _aiAutoLastRun = 0;       // 마지막 실행 시각 (30초 간격 조절)
 let _aiAutoQueue = [];        // 처리 대기 목록 [{rid, itemText, prompt, photos}]
 
-// ── 핵심: 사진 1장(또는 여러장)을 Gemini에 던져 수치를 읽어오는 함수 ──
+// ── 핵심: 사진 URL을 Gemini에 직접 던져 수치를 읽어오는 함수 ──
+// Cloudinary URL은 공개 URL이라 base64 변환 없이 직접 전달
 async function _aiReadMeter(photoUrls, prompt){
   const key = getGeminiKey();
   if(!key || !photoUrls.length) return null;
 
-  // 이미지 base64 변환 (여러 장이면 전부 parts에 포함)
+  // URL 직접 참조 (base64 변환 불필요 — 모바일 성능 저하 원인 제거)
   const parts = [{text: prompt}];
-  for(const url of photoUrls.slice(0, 6)){ // 최대 6장
-    try{
-      const res = await fetch(url);
-      if(!res.ok) continue;
-      const blob = await res.blob();
-      const b64 = await new Promise(resolve=>{
-        const r = new FileReader();
-        r.onload = ()=>resolve(r.result.split(',')[1]);
-        r.readAsDataURL(blob);
-      });
-      parts.push({inlineData:{data:b64, mimeType:blob.type||'image/jpeg'}});
-    }catch(e){ continue; }
-  }
-  if(parts.length < 2) return null; // 이미지 로드 실패
+  photoUrls.slice(0, 6).forEach(url=>{
+    parts.push({
+      fileData:{
+        mimeType: 'image/jpeg',
+        fileUri: url
+      }
+    });
+  });
 
   const body = {
     contents:[{parts}],
@@ -4567,7 +4562,6 @@ async function _aiReadMeter(photoUrls, prompt){
       {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(30000)}
     );
     if(res.status===429){
-      // 429 — 5초 대기 후 재시도 1회
       await new Promise(r=>setTimeout(r,5000));
       const res2 = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
@@ -4671,6 +4665,9 @@ async function aiAutoScanAndFill(){
 
     for(let i=0; i<targets.length; i++){
       const {eqRid, itemText, matched, photoUrls, remEl, remKey} = targets[i];
+
+      // 진행 상황 버튼에 표시
+      _setAiBtn('running', `🤖 분석 중... (${i+1}/${targets.length})`);
 
       // 직전 재확인
       if(_getRemValue(remEl)) continue;
