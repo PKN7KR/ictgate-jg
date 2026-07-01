@@ -1517,7 +1517,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.29</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.30</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4592,82 +4592,92 @@ function _aiSetRem(rid, value){
 
 // ── 메인: 현재 레코드에서 계측기 항목 스캔 → 자동 분석 ──
 async function aiAutoScanAndFill(){
-  if(_aiAutoRunning) return;  // 중복 실행 방지
-  if(!getGeminiKey()) return; // API 키 없으면 스킵
+  if(_aiAutoRunning) return;
+  if(!getGeminiKey()) return;
   if(!curRecId) return;
 
   const now = Date.now();
-  // 30초 간격 유지
   if(now - _aiAutoLastRun < 30000) return;
   _aiAutoLastRun = now;
   _aiAutoRunning = true;
 
   try{
-    // 현재 레코드의 모든 rem-inp 순회
-    const allRems = document.querySelectorAll('[id^="rem_"]');
-    if(!allRems.length){ _aiAutoRunning=false; return; }
-
-    // 처리 대상 수집
+    // photos 객체 기준으로 순회 (key = "__eq__m_m01", "__eq__p_p09" 등 설비 단위)
     const targets = [];
-    allRems.forEach(remEl=>{
-      // 이미 값 있으면 스킵
-      if(_getRemValue(remEl)) return;
-      // _remCache에도 이미 있으면 스킵
-      const rid = remEl.id.replace('rem_','');
-      if(_remCache[rid]) return;
 
-      // 점검항목명 가져오기
-      const row = remEl.closest('tr');
-      if(!row) return;
-      const itemText = row.querySelector('.tdit')?.textContent.trim()||'';
-      if(!itemText) return;
+    Object.entries(photos).forEach(([eqRid, photoArr])=>{
+      if(!photoArr || !photoArr.length) return;
 
-      // AI_METER_ITEMS에서 매칭되는 항목 찾기
-      const matched = AI_METER_ITEMS.find(m=>itemText.includes(m.keyword));
-      if(!matched) return;
-
-      // 해당 rid의 사진이 있는지 확인
-      const ridPhotos = photos[rid]||[];
-      if(!ridPhotos.length) return;
-
-      targets.push({rid, itemText, matched, ridPhotos});
-    });
-
-    if(!targets.length){ _aiAutoRunning=false; return; }
-
-    // 처리 대상이 있을 때 상태 표시
-    sysLog(`[AI Auto] 계측기 자동 분석 시작: ${targets.length}건`, 'info');
-
-    // 5초 간격으로 하나씩 처리 (15RPM 안전하게 유지)
-    for(let i=0; i<targets.length; i++){
-      const {rid, itemText, matched, ridPhotos} = targets[i];
-
-      // 처리 직전에 다시 한번 비어있는지 확인 (앞 순서에서 채워졌을 수 있음)
-      const remEl = document.getElementById('rem_'+rid);
-      if(remEl && _getRemValue(remEl)) continue;
-      if(_remCache[rid]) continue;
-
-      // 사진 URL 수집
-      const photoUrls = ridPhotos
+      // 유효한 http URL 사진만
+      const photoUrls = photoArr
         .map(p=>p.url||p.srcUrl)
         .filter(Boolean)
-        .filter(u=>u.startsWith('http')); // base64 제외 (Gemini URL 직접 접근)
+        .filter(u=>u.startsWith('http'));
+      if(!photoUrls.length) return;
 
-      if(!photoUrls.length) continue;
+      // 이 설비(eqRid)에 속한 모든 항목 row 찾기
+      // mkRow에서 rid를 그대로 blk id로 씀: id="blk_m_m01" 형태
+      // 또는 tr id="row_{rid}" 형태로 렌더링됨
+      // rem-inp id는 "rem_{섹션id}_{항목번호}" 형태 — tdit 텍스트로 매칭
+      const pfx = eqRid.includes('__eq__m_') ? 'm' : 'p';
+      const secId = eqRid.replace('__eq__m_','').replace('__eq__p_','');
 
-      // multi=false면 마지막 사진 1장만, multi=true면 전부
+      // 해당 설비 블록 찾기
+      const blk = document.getElementById('blk_'+pfx+'_'+secId);
+      if(!blk) return;
+
+      // 블록 안의 모든 항목 row 순회
+      blk.querySelectorAll('tr[id^="row_"]').forEach(row=>{
+        const itemTd = row.querySelector('.tdit');
+        if(!itemTd) return;
+        const itemText = itemTd.textContent.trim();
+        if(!itemText) return;
+
+        // AI_METER_ITEMS 매핑 확인
+        const matched = AI_METER_ITEMS.find(m=>itemText.includes(m.keyword));
+        if(!matched) return;
+
+        // 비고란 찾기
+        const remEl = row.querySelector('.rem-inp');
+        if(!remEl) return;
+
+        // 이미 값 있으면 스킵
+        if(_getRemValue(remEl)) return;
+        const remKey = remEl.id ? remEl.id.replace('rem_','') : '';
+        if(remKey && _remCache[remKey]) return;
+
+        targets.push({eqRid, itemText, matched, photoUrls, remEl, remKey});
+      });
+    });
+
+    if(!targets.length){
+      sysLog('[AI Auto] 분석 대상 없음 (사진 없거나 비고란 모두 채워짐)', 'info');
+      _aiAutoRunning=false;
+      return;
+    }
+
+    sysLog(`[AI Auto] 계측기 자동 분석 시작: ${targets.length}건`, 'info');
+
+    for(let i=0; i<targets.length; i++){
+      const {eqRid, itemText, matched, photoUrls, remEl, remKey} = targets[i];
+
+      // 직전 재확인
+      if(_getRemValue(remEl)) continue;
+      if(remKey && _remCache[remKey]) continue;
+
       const useUrls = matched.multi ? photoUrls : [photoUrls[photoUrls.length-1]];
-
       const result = await _aiReadMeter(useUrls, matched.prompt);
 
       if(result && result!=='없음' && result!=='해당없음'){
-        const filled = _aiSetRem(rid, result);
-        if(filled){
-          sysLog(`[AI Auto] ✅ ${itemText.slice(0,15)} → ${result.slice(0,20)}`, 'info');
-        }
+        _setRemValue(remEl, result);
+        remEl.classList.add('ai-filled');
+        if(remKey) _remCache[remKey] = result;
+        autoSave();
+        sysLog(`[AI Auto] ✅ ${itemText.slice(0,15)} → ${result.slice(0,20)}`, 'info');
+      } else {
+        sysLog(`[AI Auto] ⬜ ${itemText.slice(0,15)} → 수치 없음`, 'info');
       }
 
-      // 마지막 항목이 아니면 5초 대기
       if(i < targets.length-1){
         await new Promise(r=>setTimeout(r,5000));
       }
