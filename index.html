@@ -1517,7 +1517,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.30</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.31</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4238,7 +4238,17 @@ function aiPickPhoto(rid, pfx){
     item.style.cssText='cursor:pointer;border:2px solid #ddd;border-radius:6px;overflow:hidden;position:relative';
     item.onclick=()=>{
       popup.remove();
-      aiAnalyzeOnePhoto(p, rid, pfx);
+      // blk 안에서 이 항목(rid)의 rem-inp를 직접 찾아서 전달
+      // rem_+rid로 먼저 시도, 없으면 blk 내 row에서 찾기
+      let _remEl=document.getElementById('rem_'+rid);
+      if(!_remEl && blk){
+        // blk 내 모든 row 중 이 rid가 속한 row의 rem-inp 찾기
+        blk.querySelectorAll('tr').forEach(tr=>{
+          const _r=tr.querySelector('.rem-inp');
+          if(_r && (_r.id==='rem_'+rid || tr.id==='row_'+rid)) _remEl=_r;
+        });
+      }
+      aiAnalyzeOnePhoto(p, rid, pfx, _remEl);
     };
     const img=document.createElement('img');
     img.src=p.srcUrl||p.url;
@@ -4262,16 +4272,16 @@ function aiPickPhoto(rid, pfx){
 }
 
 // 사진 1장 AI 분석 → 비고란 기입
-async function aiAnalyzeOnePhoto(p, rid, pfx){
+async function aiAnalyzeOnePhoto(p, rid, pfx, remElOverride){
   const key=getGeminiKey();
   if(!key)return;
 
-  // 항목명 가져오기
-  const remEl=document.getElementById('rem_'+rid);
+  // remEl: 직접 전달받은 것 우선, 없으면 id로 찾기
+  const remEl=remElOverride||document.getElementById('rem_'+rid);
   const row=remEl?remEl.closest('tr'):null;
   const itemText=row?row.querySelector('.tdit')?.textContent.trim()||'':'';
 
-  const btn=remEl?remEl.nextElementSibling:null;
+  const btn=document.querySelector(`button[onclick*="aiPickPhoto('${rid}'"]`);
   if(btn){btn.textContent='⏳';btn.disabled=true;}
   showToast('🤖 AI 분석 중...',3000);
 
@@ -4344,7 +4354,8 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
       showToast('❌ 오류: '+e.message,4000);
     }
   }finally{
-    if(btn){btn.textContent='🔍';btn.disabled=false;}
+    const _btn=document.querySelector(`button[onclick*="aiPickPhoto('${rid}'"]`);
+    if(_btn){_btn.textContent='🔍';_btn.disabled=false;}
   }
 }
 
