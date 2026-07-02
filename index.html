@@ -3967,8 +3967,7 @@ function svcTab(t){
 }
 
 async function _svcRefresh(){
-  await Promise.all([_svcLoadCld(),_svcLoadSb()]);
-  _svcRenderNtl();
+  await Promise.all([_svcLoadCld(),_svcLoadSb(),_svcLoadNtl()]);
 }
 
 function _svcGauge(label,used,total,unit,warn=80,danger=90){
@@ -4115,38 +4114,106 @@ async function _svcLoadSb(){
   }
 }
 
-function _svcRenderNtl(){
+async function _svcLoadNtl(){
   const el=document.getElementById('svc-ntl-content');
   if(!el) return;
-  el.innerHTML=`
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-    <div style="font-size:13px;font-weight:700">🌐 Netlify</div>
-    <span style="background:#00c7b7;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">FREE/STARTER</span>
-  </div>
-  <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#075985">
-    ℹ️ Netlify는 대역폭·빌드시간 사용량 API를 공개하지 않습니다.<br>아래 대시보드에서 직접 확인하세요.
-  </div>
-  <div style="border-bottom:1px solid #f3f4f6;padding-bottom:10px;margin-bottom:10px">
-    <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">무료 플랜 한도</div>
-    ${_svcRow('대역폭','100GB / 월')}
-    ${_svcRow('빌드 시간','300분 / 월')}
-    ${_svcRow('서버리스 함수','125,000회 / 월')}
-    ${_svcRow('함수 실행 시간','최대 10초 / 건')}
-    ${_svcRow('배포 횟수','무제한')}
-  </div>
-  <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">현재 사용 중인 함수</div>
-  ${_svcRow('cld-delete.js','Cloudinary 사진 삭제')}
-  ${_svcRow('cld-usage.js','Cloudinary 사용량 조회')}
-  <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
+  el.innerHTML='<div style="text-align:center;padding:24px;color:var(--mid)">⏳ Netlify 조회 중...</div>';
+  try{
+    const res=await fetch('/.netlify/functions/ntl-usage');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const d=await res.json();
+    if(d.error) throw new Error(d.error);
+
+    const plan=d.account?.plan||'알 수 없음';
+    const planColor=plan.toLowerCase().includes('pro')?'#7c3aed':plan.toLowerCase().includes('personal')?'#0ea5e9':'#6b7280';
+
+    // 빌드 시간 (분)
+    const bmUsed=d.billing?.build_minutes_used||0;
+    const bmLimit=d.billing?.build_minutes_included||300;
+    const bmPct=Math.min(100,bmUsed/bmLimit*100);
+    const bmColor=bmPct>=80?'#ef4444':bmPct>=60?'#f59e0b':'#10b981';
+
+    // 대역폭
+    const bwUsed=d.billing?.bandwidth_usage||0;
+    const bwLimit=100; // GB
+    const bwPct=Math.min(100,bwUsed/bwLimit*100);
+
+    // 크레딧
+    const crUsed=d.billing?.credits_used||0;
+    const crLimit=d.billing?.credits_included||0;
+    const crPct=crLimit>0?Math.min(100,crUsed/crLimit*100):0;
+    const crColor=crPct>=80?'#ef4444':crPct>=60?'#f59e0b':'#10b981';
+
+    let html=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700">🌐 Netlify</div>
+      <span style="background:${planColor};color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">${plan.toUpperCase()}</span>
+    </div>`;
+
+    // 크레딧 (크레딧 기반 플랜인 경우)
+    if(crLimit>0){
+      html+=_svcGauge('크레딧',crUsed,crLimit,'credits');
+    }
+
+    // 빌드 시간
+    if(bmUsed>0||bmLimit>0){
+      html+=`<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:700">${bmPct>=80?'🔴':bmPct>=60?'🟡':'🟢'} 빌드 시간</span>
+          <span style="font-size:11px;color:var(--mid)">${bmUsed}분 / ${bmLimit}분 <b style="color:${bmColor}">(${bmPct.toFixed(1)}%)</b></span>
+        </div>
+        <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${bmPct}%;background:${bmColor};border-radius:4px"></div>
+        </div>
+      </div>`;
+    }
+
+    // 사이트 정보
+    if(d.site){
+      const lastDeploy=d.site.published_deploy?.created_at?new Date(d.site.published_deploy.created_at).toLocaleString('ko-KR'):'—';
+      html+=`<div style="border-top:1px solid #f3f4f6;padding-top:10px;margin-top:4px">
+        ${_svcRow('계정',d.account?.name||'—')}
+        ${_svcRow('사이트',d.site?.url||'—')}
+        ${_svcRow('마지막 배포',lastDeploy)}
+        ${_svcRow('플랜',plan)}
+      </div>`;
+    }
+
+    // 무료/기본 한도 안내
+    html+=`<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">플랜 한도 참고</div>
+      ${_svcRow('대역폭','100GB / 월')}
+      ${_svcRow('빌드 시간','300분 / 월')}
+      ${_svcRow('서버리스 함수','125,000회 / 월')}
+    </div>
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
+      <a href="https://app.netlify.com/teams/pkn7kr/usage" target="_blank"
+        style="display:block;padding:10px;background:#00c7b7;color:#fff;border-radius:8px;text-align:center;text-decoration:none;font-size:12px;font-weight:700">
+        🔗 Netlify 사용량 대시보드 바로가기
+      </a>
+    </div>`;
+
+    el.innerHTML=html;
+  }catch(e){
+    // API 실패 시 기존 안내 표시로 폴백
+    document.getElementById('svc-ntl-content').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700">🌐 Netlify</div>
+      <span style="background:#6b7280;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">PERSONAL</span>
+    </div>
+    <div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#991b1b">
+      ⚠️ API 조회 실패: ${e.message}<br>NETLIFY_TOKEN 환경변수를 확인하세요.
+    </div>
+    <div style="border-bottom:1px solid #f3f4f6;padding-bottom:10px;margin-bottom:10px">
+      ${_svcRow('대역폭','100GB / 월')}
+      ${_svcRow('빌드 시간','300분 / 월')}
+      ${_svcRow('서버리스 함수','125,000회 / 월')}
+    </div>
     <a href="https://app.netlify.com/teams/pkn7kr/usage" target="_blank"
       style="display:block;padding:10px;background:#00c7b7;color:#fff;border-radius:8px;text-align:center;text-decoration:none;font-size:12px;font-weight:700">
       🔗 Netlify 사용량 대시보드 바로가기
-    </a>
-    <a href="https://app.netlify.com/sites/ictsamjung/deploys" target="_blank"
-      style="display:block;padding:10px;background:#f3f4f6;color:#1a1a1a;border-radius:8px;text-align:center;text-decoration:none;font-size:12px">
-      🚀 배포 이력 확인
-    </a>
-  </div>`;
+    </a>`;
+  }
 }
 
 function _svcPrint(){
