@@ -1543,7 +1543,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.28</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.29</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4054,15 +4054,23 @@ async function _svcLoadSb(){
   if(!el) return;
   el.innerHTML='<div style="text-align:center;padding:24px;color:var(--mid)">⏳ Supabase 조회 중...</div>';
   try{
-    const [cRec,cPho,cAcc,cSes]=await Promise.all([
+    // 행 수 + 실제 DB 크기 병렬 조회 (모두 읽기 전용)
+    const [cRec,cPho,cAcc,cSes,dbSizeRes]=await Promise.all([
       fetch(`${SB_URL}/rest/v1/records?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
       fetch(`${SB_URL}/rest/v1/photos?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
       fetch(`${SB_URL}/rest/v1/accounts?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
       fetch(`${SB_URL}/rest/v1/sessions?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
+      // 실제 DB 크기 — get_db_size() RPC (security definer, 읽기 전용)
+      fetch(`${SB_URL}/rest/v1/rpc/get_db_size`,{method:'POST',headers:{...SB_HEADERS},body:'{}'}).then(r=>r.json()).catch(()=>null),
     ]);
-    const estMB=Math.round(cPho*0.5);
-    const estPct=Math.min(100,estMB/500*100);
-    const estColor=estPct>=80?'#ef4444':estPct>=60?'#f59e0b':'#10b981';
+    // DB 크기 파싱 (예: "29 MB" → 숫자+단위)
+    const dbSizeStr = dbSizeRes ? String(dbSizeRes) : '알 수 없음';
+    const dbSizeNum = parseFloat(dbSizeStr)||0;
+    const dbSizeUnit=(dbSizeStr.match(/[A-Za-z]+/)||['MB'])[0].toUpperCase();
+    const dbMB = dbSizeUnit==='GB'?dbSizeNum*1024:dbSizeUnit==='KB'?dbSizeNum/1024:dbSizeNum;
+    const dbPct = Math.min(100,dbMB/500*100);
+    const dbColor=dbPct>=80?'#ef4444':dbPct>=60?'#f59e0b':'#10b981';
+    const dbIcon=dbPct>=80?'🔴':dbPct>=60?'🟡':'🟢';
     let html=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700">🗄 Supabase</div>
@@ -4070,13 +4078,12 @@ async function _svcLoadSb(){
     </div>
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:12px;font-weight:700">${estPct>=80?'🔴':estPct>=60?'🟡':'🟢'} DB 스토리지 (추정)</span>
-        <span style="font-size:11px;color:var(--mid)">~${estMB}MB / 500MB <b style="color:${estColor}">(~${estPct.toFixed(0)}%)</b></span>
+        <span style="font-size:12px;font-weight:700">${dbIcon} DB 스토리지 (실제)</span>
+        <span style="font-size:11px;color:var(--mid)">${dbSizeStr} / 500MB <b style="color:${dbColor}">(${dbPct.toFixed(1)}%)</b></span>
       </div>
       <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
-        <div style="height:100%;width:${estPct}%;background:${estColor};border-radius:4px;transition:width .4s"></div>
+        <div style="height:100%;width:${dbPct}%;background:${dbColor};border-radius:4px;transition:width .4s"></div>
       </div>
-      <div style="font-size:10px;color:var(--mid);margin-top:3px">* 사진 행 수 × 500KB 기준 추정값</div>
     </div>
     <div style="border-top:1px solid #f3f4f6;padding-top:10px">
       ${_svcRow('점검 레코드',cRec.toLocaleString()+'건')}
@@ -4088,13 +4095,20 @@ async function _svcLoadSb(){
     <div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
       <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">무료 플랜 한도</div>
       ${_svcRow('DB 스토리지','500MB')}
+      ${_svcRow('Egress (대역폭)','5GB / 월')}
       ${_svcRow('월 활성 사용자','50,000명')}
       ${_svcRow('⚠️ 자동 일시정지','7일 미사용 시')}
     </div>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:#166534">
-      💡 정확한 DB 크기 확인:<br>
+      💡 상세 사용량 확인:<br>
       <a href="https://supabase.com/dashboard/project/pztlxymzmnipaqspwkaw/settings/billing" target="_blank" style="color:#059669">Supabase 대시보드 → Settings → Billing</a>
     </div>`;
+    if(dbPct>=80){
+      html+=`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:#991b1b">
+        🔴 DB ${dbPct.toFixed(0)}% 소진 — Pro 플랜 업그레이드 검토 필요<br>
+        Pro: $25/월 (DB 8GB · Egress 250GB)
+      </div>`;
+    }
     el.innerHTML=html;
   }catch(e){
     el.innerHTML=`<div style="color:#ef4444;padding:16px;text-align:center">❌ Supabase 조회 실패<br><span style="font-size:10px;color:var(--mid)">${e.message}</span></div>`;
