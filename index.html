@@ -2815,7 +2815,7 @@ async function admLoadDb(){
     document.getElementById('adm-cnt-photos').textContent=photos.length;
 
     // 계정 수
-    const accts=await sbGet('accounts','?select=id,role');
+    const accts=await sbGet('accounts','?id=neq.__billing__&select=id,role');
     document.getElementById('adm-cnt-accounts').textContent=accts.length;
 
     // 활성 세션
@@ -2854,7 +2854,7 @@ async function admLoadUsers(){
   const el=document.getElementById('adm-usr-list');
   if(el) el.innerHTML='<div style="color:var(--mid)">로딩 중...</div>';
   try{
-    const accts=await sbGet('accounts','?select=id,name,role,created_at&order=created_at.asc');
+    const accts=await sbGet('accounts','?id=neq.__billing__&select=id,name,role,created_at&order=created_at.asc');
     const sess=await sbGet('sessions','?select=user_id,logged_in_at');
     const activeIds=new Set(sess.map(s=>s.user_id));
     const recs=await sbGet('records','?select=created_by');
@@ -2890,7 +2890,7 @@ async function admLoadDel(){
   const el=document.getElementById('adm-del-list');
   if(el) el.innerHTML='<div style="color:var(--mid)">로딩 중...</div>';
   try{
-    const accts=await sbGet('accounts','?select=id,name,role');
+    const accts=await sbGet('accounts','?id=neq.__billing__&select=id,name,role');
     const recs=await sbGet('records','?select=id,created_by');
     const photos=await sbGet('photos','?select=id,record_id');
 
@@ -2979,7 +2979,7 @@ async function admLoadLic(){
   const el=document.getElementById('adm-lic-list');
   if(el) el.innerHTML='<div style="color:var(--mid)">로딩 중...</div>';
   try{
-    const accts=await sbGet('accounts','?select=id,name,role,plan,plan_expires&order=created_at.asc');
+    const accts=await sbGet('accounts','?id=neq.__billing__&select=id,name,role,plan,plan_expires&order=created_at.asc');
     let html='<div style="display:flex;flex-direction:column;gap:8px">';
     accts.forEach(a=>{
       const plan=a.plan||'free';
@@ -4118,108 +4118,114 @@ async function _svcLoadNtl(){
   const el=document.getElementById('svc-ntl-content');
   if(!el) return;
   el.innerHTML='<div style="text-align:center;padding:24px;color:var(--mid)">⏳ Netlify 조회 중...</div>';
+
+  const isSA=curUser?.role==='superadmin';
+
   try{
-    const res=await fetch('/.netlify/functions/ntl-usage');
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const d=await res.json();
-    if(d.error) throw new Error(d.error);
+    // Netlify 사용량 + 정산 내역 병렬 조회
+    const [ntlRes, billingRow] = await Promise.all([
+      fetch('/.netlify/functions/ntl-usage').then(r=>r.json()).catch(()=>null),
+      sbGet('accounts','?id=eq.__billing__&select=meta').then(r=>r[0]||null).catch(()=>null),
+    ]);
 
-    const plan=d.account?.plan||'알 수 없음';
-    const planColor=plan.toLowerCase().includes('pro')?'#7c3aed':plan.toLowerCase().includes('personal')?'#0ea5e9':'#6b7280';
+    const d=ntlRes||{};
+    const plan=d.account?.plan||'Personal';
+    const planColor=plan.toLowerCase().includes('pro')?'#7c3aed':'#0ea5e9';
 
-    // 빌드 시간 (분)
-    const bmUsed=d.billing?.build_minutes_used||0;
-    const bmLimit=d.billing?.build_minutes_included||300;
+    // 저장된 정산 내역 로드
+    let settled={};
+    try{ settled=JSON.parse(billingRow?.meta||'{}'); }catch(e){}
+
+    // 인보이스 목록 (API에서 받거나 빈 배열)
+    const invoices=d.billing?.invoices||[];
+
+    // 빌드 시간 게이지
+    const bmUsed=d.account?.build_minutes_used||0;
+    const bmLimit=d.account?.build_minutes_included||300;
     const bmPct=Math.min(100,bmUsed/bmLimit*100);
     const bmColor=bmPct>=80?'#ef4444':bmPct>=60?'#f59e0b':'#10b981';
-
-    // 대역폭
-    const bwUsed=d.billing?.bandwidth_usage||0;
-    const bwLimit=100; // GB
-    const bwPct=Math.min(100,bwUsed/bwLimit*100);
-
-    // 크레딧
-    const crUsed=d.billing?.credits_used||0;
-    const crLimit=d.billing?.credits_included||0;
-    const crPct=crLimit>0?Math.min(100,crUsed/crLimit*100):0;
-    const crColor=crPct>=80?'#ef4444':crPct>=60?'#f59e0b':'#10b981';
 
     let html=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700">🌐 Netlify</div>
       <span style="background:${planColor};color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">${plan.toUpperCase()}</span>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:700">${bmPct>=80?'🔴':bmPct>=60?'🟡':'🟢'} 빌드 시간</span>
+        <span style="font-size:11px;color:var(--mid)">${bmUsed}분 / ${bmLimit}분 <b style="color:${bmColor}">(${bmPct.toFixed(1)}%)</b></span>
+      </div>
+      <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${bmPct}%;background:${bmColor};border-radius:4px"></div>
+      </div>
+    </div>
+    <div style="border-top:1px solid #f3f4f6;padding-top:10px;margin-bottom:10px">
+      ${_svcRow('계정',d.account?.name||'kisspkn7\'s team')}
+      ${_svcRow('사이트',d.site?.url||'ictsamjung.netlify.app')}
+      ${d.site?.published_deploy?.created_at?_svcRow('마지막 배포',new Date(d.site.published_deploy.created_at).toLocaleString('ko-KR')):''}
     </div>`;
 
-    // 크레딧 (크레딧 기반 플랜인 경우)
-    if(crLimit>0){
-      html+=_svcGauge('크레딧',crUsed,crLimit,'credits');
-    }
-
-    // 빌드 시간
-    if(bmUsed>0||bmLimit>0){
-      html+=`<div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:12px;font-weight:700">${bmPct>=80?'🔴':bmPct>=60?'🟡':'🟢'} 빌드 시간</span>
-          <span style="font-size:11px;color:var(--mid)">${bmUsed}분 / ${bmLimit}분 <b style="color:${bmColor}">(${bmPct.toFixed(1)}%)</b></span>
-        </div>
-        <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${bmPct}%;background:${bmColor};border-radius:4px"></div>
-        </div>
+    // ── 결제 내역 섹션 ──
+    html+=`<div style="border-top:2px solid #f3f4f6;padding-top:12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:#1a1a1a">💳 Netlify 결제 내역</div>
+        <button id="ntl-show-settled" onclick="_ntlToggleSettled()" style="font-size:11px;background:#f3f4f6;border:1px solid var(--sv);border-radius:6px;padding:3px 10px;cursor:pointer;font-family:var(--mono)">정산완료 보기</button>
       </div>`;
-    }
 
-    // 사이트 정보
-    if(d.site){
-      const lastDeploy=d.site.published_deploy?.created_at?new Date(d.site.published_deploy.created_at).toLocaleString('ko-KR'):'—';
-      html+=`<div style="border-top:1px solid #f3f4f6;padding-top:10px;margin-top:4px">
-        ${_svcRow('계정',d.account?.name||'—')}
-        ${_svcRow('사이트',d.site?.url||'—')}
-        ${_svcRow('마지막 배포',lastDeploy)}
-        ${_svcRow('플랜',plan)}
-      </div>`;
-    }
+    if(invoices.length>0){
+      invoices.forEach((inv,idx)=>{
+        const invId=inv.id||('inv_'+idx);
+        const date=inv.period_start
+          ?new Date(inv.period_start).toLocaleDateString('ko-KR',{year:'numeric',month:'long'})
+          :(inv.created_at?new Date(inv.created_at).toLocaleDateString('ko-KR',{year:'numeric',month:'long'}):'—');
+        const amt=inv.amount!=null?'$'+(inv.amount/100).toFixed(2)
+                 :(inv.total!=null?'$'+(inv.total/100).toFixed(2):'$5.00');
+        const isSettled=!!settled[invId];
+        const settledBy=settled[invId]?.by||'';
+        const settledAt=settled[invId]?.at?new Date(settled[invId].at).toLocaleDateString('ko-KR'):'';
 
-    // 결제 내역
-    if(d.billing?.invoices?.length>0){
-      const invoices=d.billing.invoices.slice(0,6); // 최근 6건
-      let invHtml='';
-      invoices.forEach(inv=>{
-        const date=inv.period_start?new Date(inv.period_start).toLocaleDateString('ko-KR',{year:'numeric',month:'short'}):(inv.created_at?new Date(inv.created_at).toLocaleDateString('ko-KR',{year:'numeric',month:'short'}):'—');
-        const amt=inv.amount!=null?'$'+(inv.amount/100).toFixed(2):(inv.total!=null?'$'+(inv.total/100).toFixed(2):'—');
-        const status=inv.status==='paid'?'<span style="color:#10b981;font-size:10px">✅ 결제완료</span>':'<span style="color:#f59e0b;font-size:10px">⏳ 대기</span>';
-        invHtml+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f9f9f9;font-size:12px">
-          <span style="color:var(--mid)">${date}</span>
-          <span style="display:flex;align-items:center;gap:8px">${status}<b>${amt}</b></span>
+        html+=`<div class="ntl-inv-row${isSettled?' ntl-settled':''}" data-inv="${invId}"
+          style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #f3f4f6;${isSettled?'display:none!important;':''}" id="ntl-inv-${invId}">
+          <div>
+            <div style="font-size:12px;font-weight:700">${date}</div>
+            ${isSettled?`<div style="font-size:10px;color:#10b981">✅ 정산완료 · ${settledAt} · ${settledBy}</div>`:'<div style="font-size:10px;color:#f59e0b">⏳ 미정산</div>'}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:700;font-size:13px">${amt}</span>
+            ${isSA&&!isSettled?`<button onclick="_ntlSettle('${invId}','${date}','${amt}')" style="font-size:10px;background:#10b981;color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-family:var(--mono)">✅ 정산완료</button>`:''}
+          </div>
         </div>`;
       });
-      html+=`<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
-        <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:var(--mid)">💳 최근 결제 내역</div>
-        ${invHtml}
-      </div>`;
-    } else if(d.billing){
-      // billing 있지만 invoices 없는 경우 — 플랜 비용만 표시
-      html+=`<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
-        <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">💳 결제 정보</div>
-        ${_svcRow('플랜 비용','$5.00 / 월','(Personal 플랜)')}
-        ${d.billing.current_period_end?_svcRow('다음 결제일',new Date(d.billing.current_period_end).toLocaleDateString('ko-KR')):''}
-      </div>`;
     } else {
-      // billing API 미지원 — 고정 안내
-      html+=`<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
-        <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">💳 결제 정보</div>
-        ${_svcRow('플랜 비용','$5.00 / 월','(Personal 플랜)')}
-        <div style="margin-top:6px;font-size:10px;color:var(--mid)">상세 내역: Netlify 대시보드 → Billing</div>
-      </div>`;
+      // API 인보이스 없을 때 — 알려진 결제 내역 수동 표시
+      const knownPayments=[
+        {id:'pay_2026_07',date:'2026년 7월',amt:'$5.00'},
+        {id:'pay_2026_06_b',date:'2026년 6월 (2)',amt:'$5.00'},
+        {id:'pay_2026_06_a',date:'2026년 6월 (1)',amt:'$5.00'},
+        {id:'pay_2026_05_b',date:'2026년 5월 (2)',amt:'$5.00'},
+        {id:'pay_2026_05_a',date:'2026년 5월 (1)',amt:'$5.00'},
+        {id:'pay_2026_04',date:'2026년 4월',amt:'$9.00'},
+      ];
+      knownPayments.forEach(p=>{
+        const isSettled=!!settled[p.id];
+        const settledBy=settled[p.id]?.by||'';
+        const settledAt=settled[p.id]?.at?new Date(settled[p.id].at).toLocaleDateString('ko-KR'):'';
+        html+=`<div class="ntl-inv-row${isSettled?' ntl-settled':''}"
+          style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #f3f4f6;${isSettled?'display:none;':''}" id="ntl-inv-${p.id}">
+          <div>
+            <div style="font-size:12px;font-weight:700">${p.date}</div>
+            ${isSettled?`<div style="font-size:10px;color:#10b981">✅ 정산완료 · ${settledAt} · ${settledBy}</div>`:'<div style="font-size:10px;color:#f59e0b">⏳ 미정산</div>'}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:700;font-size:13px">${p.amt}</span>
+            ${isSA&&!isSettled?`<button onclick="_ntlSettle('${p.id}','${p.date}','${p.amt}')" style="font-size:10px;background:#10b981;color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-family:var(--mono)">✅ 정산완료</button>`:''}
+          </div>
+        </div>`;
+      });
     }
 
-    // 플랜 한도 안내
-    html+=`<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
-      <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">플랜 한도 참고</div>
-      ${_svcRow('대역폭','100GB / 월')}
-      ${_svcRow('빌드 시간','300분 / 월')}
-      ${_svcRow('서버리스 함수','125,000회 / 월')}
-    </div>
-    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
+    html+=`</div>
+    <div style="margin-top:12px">
       <a href="https://app.netlify.com/teams/pkn7kr/usage" target="_blank"
         style="display:block;padding:10px;background:#00c7b7;color:#fff;border-radius:8px;text-align:center;text-decoration:none;font-size:12px;font-weight:700">
         🔗 Netlify 사용량 대시보드 바로가기
@@ -4228,24 +4234,54 @@ async function _svcLoadNtl(){
 
     el.innerHTML=html;
   }catch(e){
-    // API 실패 시 기존 안내 표시로 폴백
-    document.getElementById('svc-ntl-content').innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700">🌐 Netlify</div>
-      <span style="background:#6b7280;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">PERSONAL</span>
-    </div>
-    <div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#991b1b">
-      ⚠️ API 조회 실패: ${e.message}<br>NETLIFY_TOKEN 환경변수를 확인하세요.
-    </div>
-    <div style="border-bottom:1px solid #f3f4f6;padding-bottom:10px;margin-bottom:10px">
-      ${_svcRow('대역폭','100GB / 월')}
-      ${_svcRow('빌드 시간','300분 / 월')}
-      ${_svcRow('서버리스 함수','125,000회 / 월')}
-    </div>
-    <a href="https://app.netlify.com/teams/pkn7kr/usage" target="_blank"
-      style="display:block;padding:10px;background:#00c7b7;color:#fff;border-radius:8px;text-align:center;text-decoration:none;font-size:12px;font-weight:700">
-      🔗 Netlify 사용량 대시보드 바로가기
-    </a>`;
+    el.innerHTML=`<div style="color:#ef4444;padding:16px;text-align:center">❌ 조회 실패: ${e.message}</div>`;
+  }
+}
+
+// ── 정산완료 토글 (정산된 항목 보기/숨기기) ──
+let _ntlShowSettled=false;
+function _ntlToggleSettled(){
+  _ntlShowSettled=!_ntlShowSettled;
+  const btn=document.getElementById('ntl-show-settled');
+  if(btn) btn.textContent=_ntlShowSettled?'정산완료 숨기기':'정산완료 보기';
+  document.querySelectorAll('.ntl-settled').forEach(el=>{
+    el.style.display=_ntlShowSettled?'flex':'none';
+  });
+}
+
+// ── 정산완료 처리 (superadmin 전용) ──
+async function _ntlSettle(invId, date, amt){
+  if(curUser?.role!=='superadmin'){ showToast('⚠️ 슈퍼어드민만 가능합니다',3000); return; }
+  if(!confirm(`${date} (${amt}) 정산완료 처리하시겠습니까?`)) return;
+
+  try{
+    // 기존 정산 내역 로드
+    const rows=await sbGet('accounts','?id=eq.__billing__&select=meta').catch(()=>[]);
+    let settled={};
+    try{ settled=JSON.parse(rows[0]?.meta||'{}'); }catch(e){}
+
+    // 정산 정보 추가
+    settled[invId]={
+      by: curUser.id||'superadmin',
+      at: new Date().toISOString(),
+      date, amt
+    };
+
+    // Supabase 저장
+    await sbUpsert('accounts',{
+      id:'__billing__',
+      role:'system',
+      name:'서비스 정산 내역',
+      meta: JSON.stringify(settled)
+    });
+
+    showToast(`✅ ${date} 정산완료 처리됐습니다`,3000);
+    // 해당 행 숨기기
+    const row=document.getElementById('ntl-inv-'+invId);
+    if(row) row.style.display='none';
+
+  }catch(e){
+    showToast('❌ 저장 실패: '+e.message,4000);
   }
 }
 
@@ -5700,7 +5736,7 @@ async function sbSaveAccounts(list){
 // ── 계정 불러오기 ──
 async function sbLoadAccounts(){
   try{
-    const rows=await sbGet('accounts','?select=id,name,pw_hash,role,email');
+    const rows=await sbGet('accounts','?id=neq.__billing__&select=id,name,pw_hash,role,email');
     return rows.map(r=>({id:r.id,name:r.name,pw:r.pw_hash,role:r.role,email:r.email||''}));
   }catch(e){sysLog('[SB] 계정 로드 실패: '+e.message,'warn');return [];}
 }
