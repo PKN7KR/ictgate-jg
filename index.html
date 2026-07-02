@@ -4199,12 +4199,13 @@ async function _svcLoadNtl(){
     } else {
       // API 인보이스 없을 때 — 알려진 결제 내역 수동 표시
       const knownPayments=[
-        {id:'pay_2026_07',date:'2026년 7월',amt:'$5.00'},
-        {id:'pay_2026_06_b',date:'2026년 6월 (2)',amt:'$5.00'},
-        {id:'pay_2026_06_a',date:'2026년 6월 (1)',amt:'$5.00'},
-        {id:'pay_2026_05_b',date:'2026년 5월 (2)',amt:'$5.00'},
-        {id:'pay_2026_05_a',date:'2026년 5월 (1)',amt:'$5.00'},
-        {id:'pay_2026_04',date:'2026년 4월',amt:'$9.00'},
+        {id:'pay_20260703',date:'2026. 7. 3.',    amt:'$5.00'},
+        {id:'pay_20260628b',date:'2026. 6. 28. (2)',amt:'$5.00'},
+        {id:'pay_20260628a',date:'2026. 6. 28. (1)',amt:'$5.00'},
+        {id:'pay_20260626',date:'2026. 6. 26.',  amt:'$5.00'},
+        {id:'pay_20260619',date:'2026. 6. 19.',  amt:'$5.00'},
+        {id:'pay_20260615',date:'2026. 6. 15.',  amt:'$5.00'},
+        {id:'pay_20260612',date:'2026. 6. 12.',  amt:'$9.00'},
       ];
       knownPayments.forEach(p=>{
         const isSettled=!!settled[p.id];
