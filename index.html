@@ -1310,6 +1310,32 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
 </div>
 
 <!-- STORAGE MONITOR (superadmin only) -->
+<!-- 서비스 현황 모달 (모든 계정 접근 가능, 읽기 전용) -->
+<div class="ov hide" id="ov-service-status">
+  <div style="background:var(--wh);border:1.5px solid var(--br);padding:20px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;border-radius:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:700">📊 서비스 현황</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--mid);margin-top:2px">SERVICE USAGE MONITOR — READ ONLY</div>
+      </div>
+      <button onclick="document.getElementById('ov-service-status').classList.add('hide')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--mid)">✕</button>
+    </div>
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--sv);margin-bottom:16px">
+      <button id="svc-tab-cld" onclick="svcTab('cld')" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border:none;background:none;cursor:pointer;border-bottom:2px solid #f97316;margin-bottom:-2px;color:#f97316;font-weight:700">☁ Cloudinary</button>
+      <button id="svc-tab-sb"  onclick="svcTab('sb')"  style="font-family:var(--mono);font-size:11px;padding:6px 14px;border:none;background:none;cursor:pointer;color:var(--mid)">🗄 Supabase</button>
+      <button id="svc-tab-ntl" onclick="svcTab('ntl')" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border:none;background:none;cursor:pointer;color:var(--mid)">🌐 Netlify</button>
+    </div>
+    <div id="svc-pane-cld"><div id="svc-cld-content" style="font-family:var(--mono);font-size:12px"><div style="text-align:center;padding:24px;color:var(--mid)">⏳ 조회 중...</div></div></div>
+    <div id="svc-pane-sb"  style="display:none"><div id="svc-sb-content"  style="font-family:var(--mono);font-size:12px"><div style="text-align:center;padding:24px;color:var(--mid)">⏳ 조회 중...</div></div></div>
+    <div id="svc-pane-ntl" style="display:none"><div id="svc-ntl-content" style="font-family:var(--mono);font-size:12px"></div></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="_svcRefresh()" style="flex:1;padding:9px;font-family:var(--mono);font-size:12px;background:#f3f4f6;border:1px solid var(--sv);border-radius:8px;cursor:pointer">🔄 새로고침</button>
+      <button onclick="_svcPrint()" style="flex:1;padding:9px;font-family:var(--mono);font-size:12px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨 보고서 출력</button>
+      <button onclick="document.getElementById('ov-service-status').classList.add('hide')" style="flex:1;padding:9px;font-family:var(--mono);font-size:12px;background:#f3f4f6;border:1px solid var(--sv);border-radius:8px;cursor:pointer">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- API 현황 모달 -->
 <div class="ov hide" id="ov-api">
   <div style="background:var(--wh);border:1.5px solid var(--br);padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
@@ -1517,7 +1543,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.27</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.28</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1553,6 +1579,11 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
         </button>
         <!-- 연동 설정 -->
         <div class="more-cat-hdr">연동 설정</div>
+        <button class="more-menu-item" onclick="openServiceStatus();_closeMore()">
+          <div class="more-menu-icon" style="background:#f0fdf4;">📊</div>
+          <div class="more-menu-label"><div class="ml-ttl">서비스 현황</div><div class="ml-sub">Cloudinary · Supabase · Netlify</div></div>
+          <span class="more-menu-arrow">›</span>
+        </button>
         <button class="more-menu-item" onclick="openApiStatus();_closeMore()">
           <div class="more-menu-icon" style="background:#f0f9ff;">📡</div>
           <div class="more-menu-label"><div class="ml-ttl">API 현황</div><div class="ml-sub">Gemini · Dropbox · Cloudinary</div></div>
@@ -3906,6 +3937,224 @@ function openGeminiSetting(){
   if(val===null)return;
   setGeminiKey(val.trim());
   showToast(val.trim()?'✅ Gemini API Key 저장됨':'🗑️ API Key 삭제됨');
+}
+
+/* -----------------------------------------------
+   서비스 현황 모니터 — 모든 계정 접근 가능
+   READ ONLY — 실데이터에 영향 없음
+   ----------------------------------------------- */
+let _svcCurTab='cld';
+
+async function openServiceStatus(){
+  document.getElementById('ov-service-status').classList.remove('hide');
+  svcTab('cld');
+  await _svcRefresh();
+}
+
+function svcTab(t){
+  _svcCurTab=t;
+  const colors={cld:'#f97316',sb:'#3ecf8e',ntl:'#00c7b7'};
+  ['cld','sb','ntl'].forEach(id=>{
+    const pane=document.getElementById('svc-pane-'+id);
+    const btn=document.getElementById('svc-tab-'+id);
+    if(!pane||!btn) return;
+    pane.style.display=id===t?'':'none';
+    btn.style.color=id===t?colors[t]:'var(--mid)';
+    btn.style.borderBottom=id===t?'2px solid '+colors[t]:'none';
+    btn.style.fontWeight=id===t?'700':'400';
+    btn.style.marginBottom=id===t?'-2px':'0';
+  });
+}
+
+async function _svcRefresh(){
+  await Promise.all([_svcLoadCld(),_svcLoadSb()]);
+  _svcRenderNtl();
+}
+
+function _svcGauge(label,used,total,unit,warn=80,danger=90){
+  const pct=total>0?Math.min(100,used/total*100):0;
+  const color=pct>=danger?'#ef4444':pct>=warn?'#f59e0b':'#10b981';
+  const icon=pct>=danger?'🔴':pct>=warn?'🟡':'🟢';
+  return `<div style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <span style="font-size:12px;font-weight:700">${icon} ${label}</span>
+      <span style="font-size:11px;color:var(--mid)">${typeof used==='number'?used.toFixed(2):used} / ${total} ${unit} <b style="color:${color}">(${pct.toFixed(1)}%)</b></span>
+    </div>
+    <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width .4s"></div>
+    </div>
+  </div>`;
+}
+
+function _svcRow(label,value,sub=''){
+  return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+    <span style="color:var(--mid)">${label}</span>
+    <span style="font-weight:700">${value}<span style="font-weight:400;color:var(--mid);margin-left:4px">${sub}</span></span>
+  </div>`;
+}
+
+async function _svcLoadCld(){
+  const el=document.getElementById('svc-cld-content');
+  if(!el) return;
+  el.innerHTML='<div style="text-align:center;padding:24px;color:var(--mid)">⏳ Cloudinary 조회 중...</div>';
+  try{
+    const res=await fetch('/.netlify/functions/cld-usage');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const d=await res.json();
+    if(d.error) throw new Error(d.error);
+    const storGB=d.storage?.usage_gb||0;
+    const bwGB=d.bandwidth?.usage_gb||0;
+    const trUsed=d.transformations?.usage||0;
+    const credits=d.credits?.usage||0;
+    const credLim=d.credits?.limit||25;
+    const credPct=d.credits?.used_percent||0;
+    const imgCnt=d.resources||0;
+    const plan=d.plan||'Free';
+    const planColor=plan.toLowerCase()==='free'?'#6b7280':'#7c3aed';
+    let html=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700">☁ Cloudinary</div>
+      <span style="background:${planColor};color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">${plan.toUpperCase()}</span>
+    </div>
+    ${_svcGauge('크레딧 (통합 한도)',credits,credLim,'credits')}
+    ${_svcGauge('스토리지',storGB,25,'GB')}
+    ${_svcGauge('대역폭 (월)',bwGB,25,'GB/월')}
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:700">🔄 변환 (Transformation)</span>
+        <span style="font-size:11px;color:var(--mid)">${trUsed.toLocaleString()} / 25,000회</span>
+      </div>
+      <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(100,trUsed/250).toFixed(1)}%;background:#0ea5e9;border-radius:4px"></div>
+      </div>
+    </div>
+    <div style="border-top:1px solid #f3f4f6;padding-top:10px">
+      ${_svcRow('총 이미지 수',imgCnt.toLocaleString()+'장')}
+      ${_svcRow('크레딧 사용률',credPct.toFixed(1)+'%',plan.toLowerCase()==='free'?'(무료 25크레딧)':'')}
+      ${_svcRow('마지막 업데이트',d.last_updated||'—')}
+    </div>`;
+    if(credPct>=90){
+      html+=`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:#991b1b">
+        🔴 크레딧 ${credPct.toFixed(0)}% 소진 — 업그레이드 검토 필요<br>
+        Plus 플랜: $89/월 (스토리지 225GB · 대역폭 225GB)
+      </div>`;
+    } else if(credPct>=80){
+      html+=`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:#92400e">
+        🟡 크레딧 ${credPct.toFixed(0)}% 소진 — 사용량 추이 모니터링 권장
+      </div>`;
+    }
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML=`<div style="color:#ef4444;padding:16px;text-align:center">❌ Cloudinary 조회 실패<br><span style="font-size:10px;color:var(--mid)">${e.message}</span></div>`;
+  }
+}
+
+async function _svcLoadSb(){
+  const el=document.getElementById('svc-sb-content');
+  if(!el) return;
+  el.innerHTML='<div style="text-align:center;padding:24px;color:var(--mid)">⏳ Supabase 조회 중...</div>';
+  try{
+    const [cRec,cPho,cAcc,cSes]=await Promise.all([
+      fetch(`${SB_URL}/rest/v1/records?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
+      fetch(`${SB_URL}/rest/v1/photos?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
+      fetch(`${SB_URL}/rest/v1/accounts?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
+      fetch(`${SB_URL}/rest/v1/sessions?select=count`,{headers:{...SB_HEADERS,'Prefer':'count=exact'}}).then(r=>{const ct=r.headers.get('content-range');return ct?parseInt(ct.split('/')[1]||'0'):0;}).catch(()=>0),
+    ]);
+    const estMB=Math.round(cPho*0.5);
+    const estPct=Math.min(100,estMB/500*100);
+    const estColor=estPct>=80?'#ef4444':estPct>=60?'#f59e0b':'#10b981';
+    let html=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700">🗄 Supabase</div>
+      <span style="background:#3ecf8e;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">FREE</span>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:700">${estPct>=80?'🔴':estPct>=60?'🟡':'🟢'} DB 스토리지 (추정)</span>
+        <span style="font-size:11px;color:var(--mid)">~${estMB}MB / 500MB <b style="color:${estColor}">(~${estPct.toFixed(0)}%)</b></span>
+      </div>
+      <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${estPct}%;background:${estColor};border-radius:4px;transition:width .4s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--mid);margin-top:3px">* 사진 행 수 × 500KB 기준 추정값</div>
+    </div>
+    <div style="border-top:1px solid #f3f4f6;padding-top:10px">
+      ${_svcRow('점검 레코드',cRec.toLocaleString()+'건')}
+      ${_svcRow('사진 행 수',cPho.toLocaleString()+'행','(photos 테이블)')}
+      ${_svcRow('계정 수',cAcc.toLocaleString()+'명')}
+      ${_svcRow('활성 세션',cSes.toLocaleString()+'개')}
+      ${_svcRow('전체 행 합계',(cRec+cPho+cAcc+cSes).toLocaleString()+'행')}
+    </div>
+    <div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">무료 플랜 한도</div>
+      ${_svcRow('DB 스토리지','500MB')}
+      ${_svcRow('월 활성 사용자','50,000명')}
+      ${_svcRow('⚠️ 자동 일시정지','7일 미사용 시')}
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:#166534">
+      💡 정확한 DB 크기 확인:<br>
+      <a href="https://supabase.com/dashboard/project/pztlxymzmnipaqspwkaw/settings/billing" target="_blank" style="color:#059669">Supabase 대시보드 → Settings → Billing</a>
+    </div>`;
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML=`<div style="color:#ef4444;padding:16px;text-align:center">❌ Supabase 조회 실패<br><span style="font-size:10px;color:var(--mid)">${e.message}</span></div>`;
+  }
+}
+
+function _svcRenderNtl(){
+  const el=document.getElementById('svc-ntl-content');
+  if(!el) return;
+  el.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="font-size:13px;font-weight:700">🌐 Netlify</div>
+    <span style="background:#00c7b7;color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">FREE/STARTER</span>
+  </div>
+  <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#075985">
+    ℹ️ Netlify는 대역폭·빌드시간 사용량 API를 공개하지 않습니다.<br>아래 대시보드에서 직접 확인하세요.
+  </div>
+  <div style="border-bottom:1px solid #f3f4f6;padding-bottom:10px;margin-bottom:10px">
+    <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">무료 플랜 한도</div>
+    ${_svcRow('대역폭','100GB / 월')}
+    ${_svcRow('빌드 시간','300분 / 월')}
+    ${_svcRow('서버리스 함수','125,000회 / 월')}
+    ${_svcRow('함수 실행 시간','최대 10초 / 건')}
+    ${_svcRow('배포 횟수','무제한')}
+  </div>
+  <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--mid)">현재 사용 중인 함수</div>
+  ${_svcRow('cld-delete.js','Cloudinary 사진 삭제')}
+  ${_svcRow('cld-usage.js','Cloudinary 사용량 조회')}
+  <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
+    <a href="https://app.netlify.com/teams/pkn7kr/usage" target="_blank"
+      style="display:block;padding:10px;background:#00c7b7;color:#fff;border-radius:8px;text-align:center;text-decoration:none;font-size:12px;font-weight:700">
+      🔗 Netlify 사용량 대시보드 바로가기
+    </a>
+    <a href="https://app.netlify.com/sites/ictsamjung/deploys" target="_blank"
+      style="display:block;padding:10px;background:#f3f4f6;color:#1a1a1a;border-radius:8px;text-align:center;text-decoration:none;font-size:12px">
+      🚀 배포 이력 확인
+    </a>
+  </div>`;
+}
+
+function _svcPrint(){
+  const cld=document.getElementById('svc-cld-content')?.innerHTML||'';
+  const sb=document.getElementById('svc-sb-content')?.innerHTML||'';
+  const ntl=document.getElementById('svc-ntl-content')?.innerHTML||'';
+  const now=new Date().toLocaleString('ko-KR');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>서비스 현황 보고서</title>
+  <style>
+    body{font-family:monospace;font-size:12px;padding:24px;max-width:600px;margin:0 auto;color:#1a1a1a}
+    h1{font-size:18px;margin-bottom:4px}.section{border:1px solid #e5e5e5;border-radius:8px;padding:14px;margin-bottom:14px}
+    .section h2{font-size:13px;font-weight:700;margin:0 0 10px}a{color:#059669}@media print{button{display:none}}
+  </style></head><body>
+  <h1>📊 서비스 현황 보고서</h1>
+  <div style="color:#aaa;font-size:11px;margin-bottom:18px">출력일시: ${now} | ICT 정보통신 점검 시스템</div>
+  <div class="section"><h2>☁ Cloudinary</h2>${cld}</div>
+  <div class="section"><h2>🗄 Supabase</h2>${sb}</div>
+  <div class="section"><h2>🌐 Netlify</h2>${ntl}</div>
+  <script>window.onload=()=>window.print();<\/script></body></html>`);
+  w.document.close();
 }
 
 // API 현황 모달 열기
