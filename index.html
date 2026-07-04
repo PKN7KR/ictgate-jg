@@ -1543,7 +1543,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.29</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.30</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4004,6 +4004,11 @@ async function _svcLoadCld(){
     const storGB=d.storage?.usage_gb||0;
     const bwGB=d.bandwidth?.usage_gb||0;
     const trUsed=d.transformations?.usage||0;
+    const trLimit=d.transformations?.limit||25000;
+    // 플랜별 스토리지/대역폭 한도 동적 적용
+    const planLower=(plan||'').toLowerCase();
+    const storLimit=planLower.includes('plus')||planLower.includes('pro')?225:25;
+    const bwLimit=planLower.includes('plus')||planLower.includes('pro')?225:25;
     const credits=d.credits?.usage||0;
     const credLim=d.credits?.limit||25;
     const credPct=d.credits?.used_percent||0;
@@ -4016,15 +4021,15 @@ async function _svcLoadCld(){
       <span style="background:${planColor};color:#fff;font-size:10px;padding:2px 8px;border-radius:12px">${plan.toUpperCase()}</span>
     </div>
     ${_svcGauge('크레딧 (통합 한도)',credits,credLim,'credits')}
-    ${_svcGauge('스토리지',storGB,25,'GB')}
-    ${_svcGauge('대역폭 (월)',bwGB,25,'GB/월')}
+    ${_svcGauge('스토리지',storGB,storLimit,'GB')}
+    ${_svcGauge('대역폭 (월)',bwGB,bwLimit,'GB/월')}
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <span style="font-size:12px;font-weight:700">🔄 변환 (Transformation)</span>
-        <span style="font-size:11px;color:var(--mid)">${trUsed.toLocaleString()} / 25,000회</span>
+        <span style="font-size:11px;color:var(--mid)">${trUsed.toLocaleString()} / ${trLimit.toLocaleString()}회</span>
       </div>
       <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
-        <div style="height:100%;width:${Math.min(100,trUsed/250).toFixed(1)}%;background:#0ea5e9;border-radius:4px"></div>
+        <div style="height:100%;width:${Math.min(100,trUsed/trLimit*100).toFixed(1)}%;background:#0ea5e9;border-radius:4px"></div>
       </div>
     </div>
     <div style="border-top:1px solid #f3f4f6;padding-top:10px">
@@ -5831,9 +5836,10 @@ function openThemePicker(){
 })();
 
 // ── 설비 단위 잠금 (Lock-based 공동작업) ──
-const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5분 후 자동 해제
+const LOCK_TIMEOUT_MS = 10 * 1000; // 10초 후 자동 해제
 
 async function sbLockEq(recId, eqKey, userName){
+  return; // 잠금 기능 비활성화
   try{
     await sbUpsert('locks',{
       record_id:recId, eq_key:eqKey,
@@ -5857,15 +5863,17 @@ async function sbGetLocks(recId){
   try{
     const rows=await sbGet('locks',`?record_id=eq.${recId}&select=eq_key,device_id,user_name,locked_at`);
     const now=Date.now();
+    // 만료된 잠금은 DB에서 즉시 삭제 (클라이언트 필터만으론 다른 사람에게 만료 반영 안 됨)
+    const expired=rows.filter(r=>(now-new Date(r.locked_at).getTime())>=LOCK_TIMEOUT_MS);
+    expired.forEach(r=>{
+      sbDelete('locks',`?record_id=eq.${recId}&eq_key=eq.${encodeURIComponent(r.eq_key)}&device_id=eq.${r.device_id}`).catch(()=>{});
+    });
     return rows.filter(r=>(now-new Date(r.locked_at).getTime())<LOCK_TIMEOUT_MS);
   }catch(e){sysLog('[Lock] 조회 실패: '+e.message,'warn');return [];}
 }
 async function sbCheckLock(recId, eqKey){
-  const locks=await sbGetLocks(recId);
-  const existing=locks.find(l=>l.eq_key===eqKey);
-  if(!existing) return {ok:true};
-  if(existing.device_id===_deviceSessionId) return {ok:true};
-  return {ok:false, by:existing.user_name};
+  // 잠금 기능 비활성화 — 항상 잠금 없음 반환
+  return {ok:true};
 }
 
 // 잠금 CSS 추가
@@ -5883,31 +5891,11 @@ async function sbCheckLock(recId, eqKey){
 
 let _lockStatusCache={};
 function _applyLockUI(locks){
+  // 잠금 기능 비활성화 — 기존 잠금 표시만 제거하고 새로운 잠금 표시 안 함
   document.querySelectorAll('.eq-locked-badge').forEach(el=>el.remove());
   document.querySelectorAll('.ecell.remote-locked').forEach(el=>el.classList.remove('remote-locked'));
   document.querySelectorAll('.ecell.my-locked').forEach(el=>el.classList.remove('my-locked'));
   _lockStatusCache={};
-  locks.forEach(lock=>{
-    _lockStatusCache[lock.eq_key]=lock;
-    const parts=lock.eq_key.split('_');
-    if(parts.length<2) return;
-    const pfx=parts[0];
-    const sid=parts.slice(1).join('_');
-    const eckEl=document.getElementById(pfx+'eck_'+sid);
-    if(!eckEl) return;
-    const cell=eckEl.closest('.ecell');
-    if(!cell) return;
-    if(lock.device_id===_deviceSessionId){
-      cell.classList.add('my-locked'); // 내가 잠근 것 — 보라색 테두리
-    } else {
-      cell.classList.add('remote-locked'); // 상대방이 잠근 것 — 반투명
-      const badge=document.createElement('div');
-      badge.className='eq-locked-badge';
-      badge.textContent='🔒'+lock.user_name;
-      cell.style.position='relative';
-      cell.appendChild(badge);
-    }
-  });
 }
 
 function lsPhotosSave(recId, photosData){
@@ -11989,7 +11977,7 @@ async function _coworkLoad(){
     }
     // 잠금 상태 UI 갱신
     if(_coworkActive){
-      sbGetLocks(curRecId).then(locks=>_applyLockUI(locks)).catch(()=>{});
+      // sbGetLocks 비활성화 — locks 테이블 미사용
     }
     // 이력 목록 사진 카운트 동기화 — 현재 레코드 외 다른 레코드의 장 수도 최신화
     try{
