@@ -924,19 +924,16 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
 .tdit-text{font-size:inherit}
 
 @media(max-width:600px){
-  .itbl{min-width:0!important;table-layout:auto!important;width:100%}
-  /* 모바일: tr을 block으로 변환 — 항목명+판정 위, 비고란 아래 */
-  .itbl tbody tr{display:block;border-bottom:1px solid var(--br);padding:4px 0}
-  .itbl tbody tr.tgrp{display:table-row}
-  .tdno{display:inline-block;width:22px;font-size:11px;color:var(--mid);vertical-align:top;padding-top:3px}
-  .tdit{display:inline-block;width:calc(100% - 100px);font-size:13px;vertical-align:top;padding:0 4px 0 0;word-break:keep-all;line-height:1.4}
-  .tds{display:inline-block;width:78px;vertical-align:top;padding:0}
-  .ssel{width:76px!important;font-size:12px!important;padding:3px 8px 3px 3px!important}
-  /* 비고란: 아래 줄 전체 너비로 — 버튼+비고 가로 배치 */
-  .tdr{display:block!important;width:100%!important;margin-top:3px;padding:0 0 0 22px}
-  .tdr-inner{padding:0;gap:3px}
-  .ai-rem-btn{min-width:28px!important;min-height:28px!important;padding:3px 6px!important;font-size:13px!important}
-  .rem-inp{font-size:13px!important;min-height:1.3em!important}
+  /* 테이블 구조 유지 — 열 너비 최적화만 적용 */
+  .itbl{min-width:0!important;table-layout:fixed!important;width:100%!important}
+  .tdno{width:20px!important;padding:4px 2px!important;font-size:11px!important}
+  .tdit{font-size:12px!important;padding:4px 3px!important;word-break:break-all!important;line-height:1.3!important;overflow-wrap:break-word!important}
+  .tds{width:80px!important;padding:3px 2px!important}
+  .ssel{width:76px!important;font-size:12px!important;padding:3px 6px 3px 3px!important}
+  .tdr{width:90px!important;padding:2px 2px!important}
+  .tdr-inner{padding:2px;gap:3px}
+  .ai-rem-btn{min-width:26px!important;min-height:26px!important;padding:3px 5px!important;font-size:12px!important}
+  .rem-inp{font-size:12px!important;min-width:40px!important}
 }
 /* ── 기본정보 토글 ── */
 .meta-toggle-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:0 6px;color:var(--mid);line-height:1;vertical-align:middle;transition:transform .2s}
@@ -1553,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.31</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.33</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
