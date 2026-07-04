@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.33</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.34</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1669,6 +1669,10 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     <div class="tab-bar" style="display:flex;align-items:center;gap:4px">
       <button class="tb act" id="tb-m" onclick="switchTab('maint')" style="transition:all .2s;white-space:nowrap">① 유지보수·관리 <span style="font-size:8px;opacity:.4">[별지 제2호]</span></button>
       <button class="tb" id="tb-p" onclick="switchTab('perf')" style="transition:all .2s;white-space:nowrap">② 성능점검 <span style="font-size:8px;opacity:.4">[별지 제3호]</span></button>
+      <button id="tab-quick-cam" onclick="openQuickCam()"
+        style="margin-left:auto;flex-shrink:0;background:rgba(245,158,11,0.92);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:none;align-items:center;gap:4px;-webkit-tap-highlight-color:transparent">
+        ⚡ 빠른촬영
+      </button>
     </div>
     <!-- 설비 검색 — 탭바 아래 (tab-bar sticky에 포함) -->
     <div id="eq-search-wrap" style="position:sticky;top:calc(var(--brand-h) + var(--nav-h) + var(--tab-h));z-index:199;background:var(--wh);padding:4px 8px 6px;border-bottom:1px solid var(--br)">
@@ -6555,16 +6559,15 @@ async function enterApp(user){
     setTimeout(()=>_retryBase64Uploads().catch(()=>{}), 5000);
     // 레코드 로드는 startCoworkPoll → _coworkLoad 즉시 실행에서 처리됨
     document.getElementById('sb-toggle').style.display='';
+    // 탭바 빠른촬영 버튼 표시 (FAB 대체)
+    const _tabQc=document.getElementById('tab-quick-cam');
+    if(_tabQc){
+      _tabQc.style.display='inline-flex';
+    }
+    // 기존 FAB 숨김 (탭바 버튼으로 대체)
     const _qcFab=document.getElementById('qc-fab');
     if(_qcFab){
-      _qcFab.style.display='inline-flex';
-      _qcFab.style.alignItems='center';
-      _qcFab.style.justifyContent='center';
-      // onclick 인라인 대신 여기서 직접 등록 (파싱 타이밍 문제 방지)
-      _qcFab.onclick=function(){ 
-        showToast('⚡ 빠른 촬영 열기...');
-        openQuickCam(); 
-      };
+      _qcFab.style.display='none';
     }
     const _qcSh=document.getElementById('qc-shutter');
     if(_qcSh) _qcSh.onclick=function(){ _qcShoot(); };
@@ -10817,9 +10820,9 @@ function closeCam(){
   // 동시적용 목록만 초기화, 연속촬영은 기본값(true) 유지
   _camContinuous=true;
   _camMultiApplyRids=[];
-  // FAB 복원
+  // FAB 숨김 유지 (탭바 버튼으로 대체됨)
   const _fab=document.getElementById('qc-fab');
-  if(_fab&&curUser&&curUser.id!=='guest') _fab.style.display='inline-flex';
+  if(_fab) _fab.style.display='none';
 }
 
 /* ═══ TAB / SIDEBAR ═══ */
