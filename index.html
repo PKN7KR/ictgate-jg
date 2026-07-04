@@ -10430,14 +10430,36 @@ async function openCam(rid,tab,titleStr,secNo,secName,locText,sid){
   _cioTimer=setInterval(_updCioTime,1000);
 
   try{
-    camStream=await navigator.mediaDevices.getUserMedia({
-      video:{
-        facingMode:{ideal:camFacing},
-        width:{ideal:4096,min:1920},
-        height:{ideal:3072,min:1080}
-      },
-      audio:false
-    });
+    // 1차 시도: torch(플래시) 지원 카메라 명시적 요청 (플립폰 등 멀티카메라 기기 대응)
+    let streamOk = false;
+    if(camFacing==='environment'){
+      try{
+        camStream=await navigator.mediaDevices.getUserMedia({
+          video:{
+            facingMode:{ideal:'environment'},
+            width:{ideal:4096,min:1920},
+            height:{ideal:3072,min:1080},
+            advanced:[{torch:false}] // torch 지원 카메라 우선 선택
+          },
+          audio:false
+        });
+        streamOk=true;
+      }catch(e1){
+        // torch constraints 미지원 기기는 일반 방식으로 폴백
+        streamOk=false;
+      }
+    }
+    // 2차 시도: 일반 방식 (전면 카메라 또는 torch constraints 실패 시)
+    if(!streamOk){
+      camStream=await navigator.mediaDevices.getUserMedia({
+        video:{
+          facingMode:{ideal:camFacing},
+          width:{ideal:4096,min:1920},
+          height:{ideal:3072,min:1080}
+        },
+        audio:false
+      });
+    }
     const video=document.getElementById('cam-video');
     video.srcObject=camStream;
     document.getElementById('cam-modal').classList.add('on');
