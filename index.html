@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.35</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.36</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -10519,9 +10519,17 @@ async function openCam(rid,tab,titleStr,secNo,secName,locText,sid){
       try{
         const caps=track.getCapabilities?track.getCapabilities():{};
         if(caps.torch){
-          // 하드웨어 플래시 지원 여부만 확인 (실제로 켜지 않음 — 카메라 열 때 깜빡임 방지)
           torchSupported=true;
-          document.getElementById('flash-mode').textContent='⚡ 하드웨어 플래시 사용 가능';
+          // 하드웨어 플래시 지원 시 자동으로 ON 상태로 준비
+          flashOn=true;
+          try{
+            await torchTrack.applyConstraints({advanced:[{torch:true}]});
+            document.getElementById('flash-mode').textContent='⚡ 하드웨어 플래시 사용 가능';
+          }catch(e){
+            document.getElementById('flash-mode').textContent='⚡ 하드웨어 플래시 사용 가능';
+          }
+          const fbtn=document.getElementById('flash-btn');
+          if(fbtn){fbtn.textContent='ON';fbtn.className='flash-tog on';}
         } else {
           document.getElementById('flash-mode').textContent='소프트 플래시';
         }
