@@ -919,14 +919,24 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
 /* Paper 테마 */
 [data-theme="paper"] .rem-inp{color:#2c1810!important;-webkit-text-fill-color:#2c1810!important;}
 .rem-inp.ai-filled{border-left:3px solid #7c3aed!important;padding-left:6px!important;}
+/* tdr-inner: 버튼+비고란 가로 배치 */
+.tdr-inner{display:flex;align-items:center;gap:4px;padding:2px 4px}
+.tdit-text{font-size:inherit}
+
 @media(max-width:600px){
-  .itbl{min-width:0!important;table-layout:fixed;width:100%}
-  .tdno{width:20px;padding:6px 4px;font-size:12px}
-  .tdit{font-size:14px;padding:6px 4px 6px 0;word-break:keep-all}
-  .tds{padding:4px 6px;width:90px}
-  .ssel{width:86px!important;font-size:13px!important;padding:5px 14px 5px 5px!important}
-  .tdr{width:80px;min-width:0}
-  .rem-inp{font-size:13px!important}
+  .itbl{min-width:0!important;table-layout:auto!important;width:100%}
+  /* 모바일: tr을 block으로 변환 — 항목명+판정 위, 비고란 아래 */
+  .itbl tbody tr{display:block;border-bottom:1px solid var(--br);padding:4px 0}
+  .itbl tbody tr.tgrp{display:table-row}
+  .tdno{display:inline-block;width:22px;font-size:11px;color:var(--mid);vertical-align:top;padding-top:3px}
+  .tdit{display:inline-block;width:calc(100% - 100px);font-size:13px;vertical-align:top;padding:0 4px 0 0;word-break:keep-all;line-height:1.4}
+  .tds{display:inline-block;width:78px;vertical-align:top;padding:0}
+  .ssel{width:76px!important;font-size:12px!important;padding:3px 8px 3px 3px!important}
+  /* 비고란: 아래 줄 전체 너비로 — 버튼+비고 가로 배치 */
+  .tdr{display:block!important;width:100%!important;margin-top:3px;padding:0 0 0 22px}
+  .tdr-inner{padding:0;gap:3px}
+  .ai-rem-btn{min-width:28px!important;min-height:28px!important;padding:3px 6px!important;font-size:13px!important}
+  .rem-inp{font-size:13px!important;min-height:1.3em!important}
 }
 /* ── 기본정보 토글 ── */
 .meta-toggle-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:0 6px;color:var(--mid);line-height:1;vertical-align:middle;transition:transform .2s}
@@ -1543,7 +1553,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.30</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.31</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4718,7 +4728,7 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
         if(!res2.ok){showToast('❌ 재시도 실패: '+res2.status,4000);return;}
         const data=await res2.json();
         const text=(data?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
-        if(text&&remEl){remEl.value=text.slice(0,80);remEl.dispatchEvent(new Event('input'));autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
+        if(text&&remEl){_setRemValue(remEl,text.slice(0,80));remEl.classList.add('ai-filled');_remCache[remEl.id.replace('rem_','')]=text.slice(0,80);autoSave();showToast('✅ 비고 기입: '+text.slice(0,20),3000);}
         return;
       }
       showToast('❌ API 오류: '+res.status,4000);return;
@@ -4729,9 +4739,9 @@ async function aiAnalyzeOnePhoto(p, rid, pfx){
 
     if(text&&remEl){
       const _val=text.slice(0,80);
-      remEl.value='🤖 '+_val;
+      _setRemValue(remEl,'🤖 '+_val);
       remEl.classList.add('ai-filled');
-      _remCache[remEl.id]='🤖 '+_val; // 메모리 캐시에도 저장
+      _remCache[remEl.id.replace('rem_','')]='🤖 '+_val; // 메모리 캐시에도 저장
       autoSave();
       showToast('✅ 비고 기입: '+_val.slice(0,20),3000);
     }
@@ -8738,20 +8748,22 @@ function mkRow(rid,num,item,pfx){
   const tr=document.createElement('tr');tr.id='row_'+rid;
   tr.innerHTML=`
     <td class="tdno">${String(num).padStart(2,'0')}</td>
-    <td class="tdit">${item}${isPerfImp?'<span style="font-family:var(--mono);font-size:8px;color:#8b5cf6;margin-left:4px">[성능]</span>':''}</td>
+    <td class="tdit"><div class="tdit-text">${item}${isPerfImp?'<span style="font-family:var(--mono);font-size:8px;color:#8b5cf6;margin-left:4px">[성능]</span>':''}</div></td>
     <td class="tds"><select class="ssel na" id="sel_${rid}" onchange="onSel('${rid}','${pfx}','${tab}')">
       <option value="ok">${okLabel}</option><option value="na" selected>${naLabel}</option><option value="ng">${ngLabel}</option>
     </select></td>
-    <td class="tdr" style="display:flex;align-items:center;gap:4px;padding:4px 6px">
-      <button class="ai-rem-btn" title="사진 선택 후 AI 비고 자동기입"
-        onclick="aiPickPhoto('${rid}','${pfx}')"
-        style="flex-shrink:0;background:#7c3aed;color:#fff;border:none;border-radius:4px;padding:5px 8px;font-size:14px;cursor:pointer;white-space:nowrap;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center">🔍</button>
-      <div class="rem-inp" id="rem_${rid}" contenteditable="true" role="textbox"
-        data-placeholder="비고..."
-        style="flex:1;min-width:0;min-height:1.4em;word-break:break-all;padding:3px 4px;border:none;border-bottom:1px solid rgba(128,128,128,.3);outline:none;font-size:14px;font-family:var(--sans);background:transparent;color:inherit;cursor:text;"
-        onfocus="this.style.borderBottom='2px solid #7c3aed';this.closest('tr').classList.add('row-active')"
-        onblur="this.style.borderBottom='1px solid rgba(128,128,128,.3)';if(!this.textContent.trim())this.closest('tr').classList.remove('row-active');_onRemDivBlur('${rid}','${pfx}')"
-        oninput="_onRemDivInput('${rid}','${pfx}')"></div>
+    <td class="tdr">
+      <div class="tdr-inner">
+        <button class="ai-rem-btn" title="사진 선택 후 AI 비고 자동기입"
+          onclick="aiPickPhoto('${rid}','${pfx}')"
+          style="flex-shrink:0;background:#7c3aed;color:#fff;border:none;border-radius:4px;padding:5px 8px;font-size:14px;cursor:pointer;white-space:nowrap;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center">🔍</button>
+        <div class="rem-inp${_remCache[rid]?' ai-filled':''}" id="rem_${rid}" contenteditable="true" role="textbox"
+          data-placeholder="비고..."
+          style="flex:1;min-width:0;min-height:1.4em;word-break:break-all;padding:3px 4px;border:none;border-bottom:1px solid rgba(128,128,128,.3);outline:none;font-size:14px;font-family:var(--sans);background:transparent;color:inherit;cursor:text;"
+          onfocus="this.style.borderBottom='2px solid #7c3aed';this.closest('tr').classList.add('row-active')"
+          onblur="this.style.borderBottom='1px solid rgba(128,128,128,.3)';if(!this.textContent.trim())this.closest('tr').classList.remove('row-active');_onRemDivBlur('${rid}','${pfx}')"
+          oninput="_onRemDivInput('${rid}','${pfx}')">${_remCache[rid]?_remCache[rid]:''}</div>
+      </div>
     </td>`;
   return tr;
 }
@@ -11362,7 +11374,7 @@ async function doPrint(onlyIds){
       if(row.classList.contains('tgrp'))return;
       const item=row.querySelector('.tdit')?.textContent.trim()||'';
       const selVal=row.querySelector('.ssel')?.value||'';
-      const rem=row.querySelector('.rem-inp')?.value||'';
+      const rem=_getRemValue(row.querySelector('.rem-inp'))||'';
       valMap[item]={selVal,rem};
     });
 
@@ -11471,7 +11483,7 @@ async function doPrint(onlyIds){
       const selVal=row.querySelector('.ssel')?.value||'';
       const selTxt=selVal==='ok'?'O':selVal==='ng'?'X':selVal==='na'?'-':'';
       const selCls=selVal==='ok'?'ok':selVal==='ng'?'ng':'';
-      const rem=(row.querySelector('.rem-inp')?.value||'').replace(/^🤖\s*/,'');
+      const rem=(_getRemValue(row.querySelector('.rem-inp'))||'').replace(/^🤖\s*/,'');
       return {item,selTxt,selCls,rem,isNg:selVal==='ng'};
     });
 
