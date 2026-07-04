@@ -4035,7 +4035,7 @@ async function _svcLoadCld(){
     <div style="border-top:1px solid #f3f4f6;padding-top:10px">
       ${_svcRow('총 이미지 수',imgCnt.toLocaleString()+'장')}
       ${_svcRow('크레딧 사용률',credPct.toFixed(1)+'%',plan.toLowerCase()==='free'?'(무료 25크레딧)':'')}
-      ${_svcRow('마지막 업데이트',d.last_updated||'—')}
+      ${_svcRow('조회 시각',new Date().toLocaleString('ko-KR',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}))}
     </div>`;
     if(credPct>=90){
       html+=`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:11px;color:#991b1b">
