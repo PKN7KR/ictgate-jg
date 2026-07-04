@@ -4005,16 +4005,16 @@ async function _svcLoadCld(){
     const bwGB=d.bandwidth?.usage_gb||0;
     const trUsed=d.transformations?.usage||0;
     const trLimit=d.transformations?.limit||25000;
-    // 플랜별 스토리지/대역폭 한도 동적 적용
-    const planLower=(plan||'').toLowerCase();
-    const storLimit=planLower.includes('plus')||planLower.includes('pro')?225:25;
-    const bwLimit=planLower.includes('plus')||planLower.includes('pro')?225:25;
     const credits=d.credits?.usage||0;
     const credLim=d.credits?.limit||25;
     const credPct=d.credits?.used_percent||0;
     const imgCnt=d.resources||0;
-    const plan=d.plan||'Free';
+    const plan=d.plan||'Free'; // plan 먼저 선언
     const planColor=plan.toLowerCase()==='free'?'#6b7280':'#7c3aed';
+    // 플랜별 스토리지/대역폭 한도 동적 적용
+    const planLower=plan.toLowerCase();
+    const storLimit=planLower.includes('plus')||planLower.includes('pro')?225:25;
+    const bwLimit=planLower.includes('plus')||planLower.includes('pro')?225:25;
     let html=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700">☁ Cloudinary</div>
