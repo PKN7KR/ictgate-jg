@@ -10430,28 +10430,49 @@ async function openCam(rid,tab,titleStr,secNo,secName,locText,sid){
   _cioTimer=setInterval(_updCioTime,1000);
 
   try{
-    // 1차 시도: torch(플래시) 지원 카메라 명시적 요청 (플립폰 등 멀티카메라 기기 대응)
-    let streamOk = false;
+    // 후면 카메라 중 torch(플래시) 지원하는 카메라를 직접 찾아서 선택
+    // 플립폰/멀티카메라 기기 대응 — 모든 기기에서 플래시 작동하도록
+    let selectedDeviceId = null;
+
     if(camFacing==='environment'){
       try{
-        camStream=await navigator.mediaDevices.getUserMedia({
-          video:{
-            facingMode:{ideal:'environment'},
-            width:{ideal:4096,min:1920},
-            height:{ideal:3072,min:1080},
-            advanced:[{torch:false}] // torch 지원 카메라 우선 선택
-          },
-          audio:false
-        });
-        streamOk=true;
-      }catch(e1){
-        // torch constraints 미지원 기기는 일반 방식으로 폴백
-        streamOk=false;
-      }
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d=>d.kind==='videoinput');
+
+        // 각 카메라를 순서대로 열어보면서 torch 지원하는 것 찾기
+        for(const device of videoDevices){
+          try{
+            const testStream = await navigator.mediaDevices.getUserMedia({
+              video:{ deviceId:{exact:device.deviceId} },
+              audio:false
+            });
+            const track = testStream.getVideoTracks()[0];
+            const caps = track.getCapabilities ? track.getCapabilities() : {};
+            const settings = track.getSettings ? track.getSettings() : {};
+            testStream.getTracks().forEach(t=>t.stop());
+
+            // torch 지원 + 후면 카메라인 경우 선택
+            if(caps.torch && (settings.facingMode==='environment' || !settings.facingMode)){
+              selectedDeviceId = device.deviceId;
+              break;
+            }
+          }catch(e){ continue; }
+        }
+      }catch(e){ /* enumerateDevices 실패 시 기본 방식 사용 */ }
     }
-    // 2차 시도: 일반 방식 (전면 카메라 또는 torch constraints 실패 시)
-    if(!streamOk){
-      camStream=await navigator.mediaDevices.getUserMedia({
+
+    // torch 지원 카메라 찾았으면 해당 카메라로, 아니면 기본 방식
+    if(selectedDeviceId){
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video:{
+          deviceId:{exact:selectedDeviceId},
+          width:{ideal:4096,min:1920},
+          height:{ideal:3072,min:1080}
+        },
+        audio:false
+      });
+    } else {
+      camStream = await navigator.mediaDevices.getUserMedia({
         video:{
           facingMode:{ideal:camFacing},
           width:{ideal:4096,min:1920},
