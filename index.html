@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.36</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.37</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -10520,16 +10520,7 @@ async function openCam(rid,tab,titleStr,secNo,secName,locText,sid){
         const caps=track.getCapabilities?track.getCapabilities():{};
         if(caps.torch){
           torchSupported=true;
-          // 하드웨어 플래시 지원 시 자동으로 ON 상태로 준비
-          flashOn=true;
-          try{
-            await torchTrack.applyConstraints({advanced:[{torch:true}]});
-            document.getElementById('flash-mode').textContent='⚡ 하드웨어 플래시 사용 가능';
-          }catch(e){
-            document.getElementById('flash-mode').textContent='⚡ 하드웨어 플래시 사용 가능';
-          }
-          const fbtn=document.getElementById('flash-btn');
-          if(fbtn){fbtn.textContent='ON';fbtn.className='flash-tog on';}
+          document.getElementById('flash-mode').textContent='⚡ 하드웨어 플래시 사용 가능';
         } else {
           document.getElementById('flash-mode').textContent='소프트 플래시';
         }
@@ -10721,12 +10712,17 @@ async function capturePhoto(){
   const rid=camRid,tab=camTab;
   const _multiTargets=[..._camMultiApplyRids]; // 이번 촬영에 적용할 다른 설비 rid 목록
 
-  // torch 끄기 — 연속촬영 중 flashOn 상태면 유지, 아닌 경우만 끔
+  // torch 처리 — 촬영 직후 잠깐 끄고 flashOn 상태면 자동 복구
   if(torchSupported&&torchTrack){
-    if(!(_camContinuous&&flashOn)){
-      try{await torchTrack.applyConstraints({advanced:[{torch:false}]});}catch(e){}
+    try{await torchTrack.applyConstraints({advanced:[{torch:false}]});}catch(e){}
+    // flashOn 상태면 짧은 딜레이 후 자동으로 다시 켬 (연속/단일 모두)
+    if(flashOn){
+      setTimeout(async()=>{
+        if(torchTrack&&flashOn){
+          try{await torchTrack.applyConstraints({advanced:[{torch:true}]});}catch(e){}
+        }
+      }, 300); // 0.3초 후 복구 — 너무 빠르면 하드웨어 충돌 방지
     }
-    // 연속촬영 + 플래시 ON: torch 유지 (사용자가 명시적으로 켠 상태 유지)
   }
 
   // 연속촬영 모드가 아니면 카메라 모달 닫음 (기존 동작)
