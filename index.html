@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.38</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.39</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4191,17 +4191,20 @@ async function _svcLoadNtl(){
     if(invoices.length>0){
       invoices.forEach((inv,idx)=>{
         const invId=inv.id||('inv_'+idx);
-        const date=inv.period_start
-          ?new Date(inv.period_start).toLocaleDateString('ko-KR',{year:'numeric',month:'long'})
-          :(inv.created_at?new Date(inv.created_at).toLocaleDateString('ko-KR',{year:'numeric',month:'long'}):'—');
-        const amt=inv.amount!=null?'$'+(inv.amount/100).toFixed(2)
-                 :(inv.total!=null?'$'+(inv.total/100).toFixed(2):'$5.00');
+        // bb-api receipts 형식: transaction_created_at, display_amount
+        const dateStr=inv.date||inv.transaction_created_at||inv.created_at||'—';
+        const date=inv.date
+          ? inv.date  // ntl-usage.js에서 이미 포맷된 경우
+          : (inv.created_at
+            ? new Date(inv.created_at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})
+            : '—');
+        const amt=inv.amount||inv.display_amount||'$5.00';
         const isSettled=!!settled[invId];
         const settledBy=settled[invId]?.by||'';
         const settledAt=settled[invId]?.at?new Date(settled[invId].at).toLocaleDateString('ko-KR'):'';
 
-        html+=`<div class="ntl-inv-row${isSettled?' ntl-settled':''}" data-inv="${invId}"
-          style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #f3f4f6;${isSettled?'display:none!important;':''}" id="ntl-inv-${invId}">
+        html+=`<div class="ntl-inv-row${isSettled?' ntl-settled':''}"
+          style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #f3f4f6;${isSettled?'display:none;':''}" id="ntl-inv-${invId}">
           <div>
             <div style="font-size:12px;font-weight:700">${date}</div>
             ${isSettled?`<div style="font-size:10px;color:#10b981">✅ 정산완료 · ${settledAt} · ${settledBy}</div>`:'<div style="font-size:10px;color:#f59e0b">⏳ 미정산</div>'}
@@ -4285,11 +4288,12 @@ async function _ntlSettle(invId, date, amt){
       date, amt
     };
 
-    // Supabase 저장
+    // Supabase 저장 (pw_hash 포함 — NOT NULL 제약 조건)
     await sbUpsert('accounts',{
       id:'__billing__',
       role:'system',
       name:'서비스 정산 내역',
+      pw_hash:'__system_no_login__',
       meta: JSON.stringify(settled)
     });
 
