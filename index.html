@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.41</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.42</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8325,8 +8325,8 @@ function toggleEq(sid,pfx){
   if(blk){
     blk.classList.toggle('vis',on);
     if(!on){
-      blk.querySelectorAll('.ssel').forEach(e=>{e.value='na';e.className='ssel na';});
-      blk.querySelectorAll('tr[id^="row_"]').forEach(r=>r.classList.remove('rok','rng'));
+      // sel 값 리셋 제거 — 축소 시에도 판정값 유지
+      // (기존: e.value='na' 강제 리셋 → 판정 표시 초기화 버그 원인)
       blk.querySelectorAll('.perf-imported-hdr,.perf-imported').forEach(el=>el.remove());
     } else if(pfx==='m'&&_perfImported){
       const msec=MAINT_DATA.find(s=>s.id===sid);
