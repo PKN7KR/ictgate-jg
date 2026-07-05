@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.46</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.47</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -13432,6 +13432,8 @@ document.addEventListener('click',function(e){
 function openSheet(){
   var tbody=document.getElementById('sheet-tbody');
   tbody.innerHTML='';
+  // 현황표 열릴 때 잠금 상태 초기화 — 잠금해제면 반드시 클릭 가능하게
+  tbody.style.pointerEvents=_eqLocked?'none':'auto';
   // 모든 ecell 수집 (m 탭 기준)
   var cells=Array.from(document.querySelectorAll('#m-equip-grid .ecell'));
   if(!cells.length) cells=Array.from(document.querySelectorAll('.ecell'));
