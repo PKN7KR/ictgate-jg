@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.40</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.44</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -5617,7 +5617,7 @@ async function sbSaveRecord(r){
 // ── 레코드 목록 불러오기 ──
 async function sbLoadRecords(){
   try{
-    // superadmin은 전체, 나머지는 본인 레코드만
+    // superadmin: 전체 조회 / 나머지: 본인 레코드만
     const uid=curUser?.id||'unknown';
     const isSA=curUser?.role==='superadmin';
     const query=isSA
@@ -6767,6 +6767,11 @@ function doLogout(){
   },600);
 }
 function manualSave(){
+  // superadmin은 조회 전용 — 저장 불가
+  if(curUser?.role==='superadmin'){
+    showToast('👁️ 조회 전용 계정 — 저장되지 않습니다',2000);
+    return;
+  }
   const btn=document.getElementById('save-btn');
   if(btn){btn.textContent='저장중...';btn.disabled=true;}
   lsSave(serialize());
@@ -7504,6 +7509,8 @@ function _syncPtoM(fld){
 }
 function autoSave(){
   if(_noAutoSave)return;
+  // superadmin은 조회 전용 — DB 저장 차단 (owner_id 오염 방지)
+  if(curUser?.role==='superadmin')return;
   showDot(true);
   clearTimeout(autoTimer);
   autoTimer=setTimeout(()=>{
@@ -8325,8 +8332,6 @@ function toggleEq(sid,pfx){
   if(blk){
     blk.classList.toggle('vis',on);
     if(!on){
-      blk.querySelectorAll('.ssel').forEach(e=>{e.value='na';e.className='ssel na';});
-      blk.querySelectorAll('tr[id^="row_"]').forEach(r=>r.classList.remove('rok','rng'));
       blk.querySelectorAll('.perf-imported-hdr,.perf-imported').forEach(el=>el.remove());
     } else if(pfx==='m'&&_perfImported){
       const msec=MAINT_DATA.find(s=>s.id===sid);
