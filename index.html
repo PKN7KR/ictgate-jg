@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.44</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.45</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -10034,6 +10034,22 @@ function lbNav(dir){lbIdx=(lbIdx+dir+lbItems.length)%lbItems.length;showLb();}
 function closeLb(e){if(!e||e.target===document.getElementById('lb'))document.getElementById('lb').classList.remove('on');}
 
 /* ═══ 설비별 일괄 판정 ═══ */
+// ── 열린 미니패널 val-label 일괄 갱신 (bulk 판정 후 즉시 반영용) ──
+function _refreshMiniPanels(){
+  const vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
+  const cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
+  document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
+    const rid=div.dataset.rid;
+    const sel=document.getElementById('sel_'+rid);
+    if(!sel) return;
+    const vl=div.querySelector('.val-label');
+    if(vl){
+      vl.textContent=vMap[sel.value]||'—';
+      vl.style.color=cMap[sel.value]||'var(--mid)';
+    }
+  });
+}
+
 function bulkSec(bid,val,tab){
   const [pfx,secId]=bid.split(/_(.+)/);
   const blk=document.getElementById('blk_'+pfx+'_'+secId);
@@ -10052,6 +10068,7 @@ function bulkSec(bid,val,tab){
   updStats(tab);updCnt(secId,pfx);updNg(tab);
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();
+  _refreshMiniPanels();
 }
 
 /* ═══ 성능점검 탭에서 유지보수 항목 가져오기 ═══ */
@@ -10268,6 +10285,7 @@ function bulkOk(tab){
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();showToast('✓ 해당없음 → 적합 일괄 적용');
+  _refreshMiniPanels();
 }
 
 /* ═══ 일괄 해제 (전체 → 해당없음) ═══ */
@@ -10289,6 +10307,7 @@ function bulkNa(tab){
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();showToast('— 전체 판정 해당없음으로 초기화');
+  _refreshMiniPanels();
 }
 
 /* ═══ 갤러리 업로드 ═══ */
@@ -10750,20 +10769,6 @@ async function capturePhoto(){
     addPhoto(rid, tab, url, name);
   }
 
-  // 사진 저장 완료 후 열린 미니패널 val-label 자동 갱신
-  // (촬영 후 화면 전환 시 판정값이 "—"으로 보이는 문제 해결)
-  setTimeout(()=>{
-    document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
-      const _r=div.dataset.rid;
-      const _s=document.getElementById('sel_'+_r);
-      if(!_s) return;
-      const _v=_s.value;
-      const _vm={ok:'✅적합',ng:'❌부적합',na:'—'};
-      const _cm={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
-      const _vl=div.querySelector('.val-label');
-      if(_vl){_vl.textContent=_vm[_v]||'—';_vl.style.color=_cm[_v]||'var(--mid)';}
-    });
-  },200);
 
   // 다른 설비에도 동시 적용 — 각 설비마다 고유한 명칭/위치로 표를 다시 그려서 별도 업로드
   // (같은 이미지를 그대로 복제하면 원본 설비의 표가 잘못 찍히는 문제가 있어, 깨끗한 원본에 재드로잉)
@@ -10845,21 +10850,6 @@ function closeCam(){
   // FAB 숨김 유지 (탭바 버튼으로 대체됨)
   const _fab=document.getElementById('qc-fab');
   if(_fab) _fab.style.display='none';
-  // 카메라 닫힐 때 열린 미니패널 val-label 자동 갱신
-  // → 촬영하기로 화면 전환 시 판정 표시가 즉시 반영됨
-  const _vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
-  const _cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
-  document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
-    const rid=div.dataset.rid;
-    const sel=document.getElementById('sel_'+rid);
-    if(!sel) return;
-    const curVal=sel.value||'na';
-    const vl=div.querySelector('.val-label');
-    if(vl){
-      vl.textContent=_vMap[curVal]||'—';
-      vl.style.color=_cMap[curVal]||'var(--mid)';
-    }
-  });
 }
 
 /* ═══ TAB / SIDEBAR ═══ */
