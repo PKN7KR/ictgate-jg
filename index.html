@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.9.1</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.40</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1673,7 +1673,6 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
         style="margin-left:auto;flex-shrink:0;background:rgba(245,158,11,0.92);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:none;align-items:center;gap:4px;-webkit-tap-highlight-color:transparent">
         ⚡ 빠른촬영
       </button>
-
     </div>
     <!-- 설비 검색 — 탭바 아래 (tab-bar sticky에 포함) -->
     <div id="eq-search-wrap" style="position:sticky;top:calc(var(--brand-h) + var(--nav-h) + var(--tab-h));z-index:199;background:var(--wh);padding:4px 8px 6px;border-bottom:1px solid var(--br)">
@@ -4597,7 +4596,6 @@ ${itemList.map((it,i)=>`${i+1}. ${it}`).join('\n')}
 }
 
 // 사진 선택 팝업 → 1장 AI 분석 → 비고란 기입
-
 function aiPickPhoto(rid, pfx){
   const key=getGeminiKey();
   if(!key){
@@ -6563,11 +6561,14 @@ async function enterApp(user){
     document.getElementById('sb-toggle').style.display='';
     // 탭바 빠른촬영 버튼 표시 (FAB 대체)
     const _tabQc=document.getElementById('tab-quick-cam');
-    if(_tabQc) _tabQc.style.display='inline-flex';
-
-    // 기존 FAB 숨김
+    if(_tabQc){
+      _tabQc.style.display='inline-flex';
+    }
+    // 기존 FAB 숨김 (탭바 버튼으로 대체)
     const _qcFab=document.getElementById('qc-fab');
-    if(_qcFab) _qcFab.style.display='none';
+    if(_qcFab){
+      _qcFab.style.display='none';
+    }
     const _qcSh=document.getElementById('qc-shutter');
     if(_qcSh) _qcSh.onclick=function(){ _qcShoot(); };
     const _isSuperAdmin=user.role==='superadmin';
@@ -8324,46 +8325,36 @@ function toggleEq(sid,pfx){
   if(blk){
     blk.classList.toggle('vis',on);
     if(!on){
-      // 축소 시 sel 리셋 제거 — 판정값 보존
+      blk.querySelectorAll('.ssel').forEach(e=>{e.value='na';e.className='ssel na';});
+      blk.querySelectorAll('tr[id^="row_"]').forEach(r=>r.classList.remove('rok','rng'));
       blk.querySelectorAll('.perf-imported-hdr,.perf-imported').forEach(el=>el.remove());
-    } else {
-      // 확장 시 _memRecs에서 sel 값 복원 (이력 전환 시에도 판정값 유지)
-      const cur=_memRecs.find(r=>r.id===curRecId);
-      if(cur&&cur.sel){
-        blk.querySelectorAll('.ssel').forEach(e=>{
-          const val=cur.sel[e.id];
-          if(val){e.value=val;e.className='ssel '+val;rowStyle(e.id.replace('sel_',''),val);}
-        });
-      }
-      // 성능점검 항목 임포트 (m탭)
-      if(pfx==='m'&&_perfImported){
-        const msec=MAINT_DATA.find(s=>s.id===sid);
-        if(msec){
-          const psec=PERF_DATA.find(p=>p.name===msec.name);
-          if(psec){
-            const tbody=blk.querySelector('tbody');
-            if(tbody&&!tbody.querySelector('.perf-imported')){
-              const hdr=document.createElement('tr');
-              hdr.className='perf-imported-hdr';hdr.dataset.perfSrc=sid;
-              hdr.innerHTML=`<td colspan="4">▸ 성능점검 항목 (${psec.name})</td>`;
-              tbody.appendChild(hdr);
-              psec.items.forEach((item,ii)=>{
-                const origRid=`${psec.id}_${ii}`;
-                const origSel=document.getElementById('sel_'+origRid);
-                const origRem=document.getElementById('rem_'+origRid);
-                const origVal=origSel?origSel.value:'na';
-                const origRemVal=origRem?origRem.value:'';
-                const rid=`perf_imp_${psec.id}_${ii}`;
-                const tr=mkRow(rid,ii+1,item,'m');
-                tr.classList.add('perf-imported');tr.dataset.perfSrc=sid;
-                tbody.appendChild(tr);
-                const impSel=document.getElementById('sel_'+rid);
-                if(impSel){impSel.value=origVal;impSel.className='ssel '+origVal;}
-                rowStyle(rid,origVal);
-                const impRem=document.getElementById('rem_'+rid);
-                if(impRem&&origRemVal)impRem.value=origRemVal;
-              });
-            }
+    } else if(pfx==='m'&&_perfImported){
+      const msec=MAINT_DATA.find(s=>s.id===sid);
+      if(msec){
+        const psec=PERF_DATA.find(p=>p.name===msec.name);
+        if(psec){
+          const tbody=blk.querySelector('tbody');
+          if(tbody&&!tbody.querySelector('.perf-imported')){
+            const hdr=document.createElement('tr');
+            hdr.className='perf-imported-hdr';hdr.dataset.perfSrc=sid;
+            hdr.innerHTML=`<td colspan="4">▸ 성능점검 항목 (${psec.name})</td>`;
+            tbody.appendChild(hdr);
+            psec.items.forEach((item,ii)=>{
+              const origRid=`${psec.id}_${ii}`;
+              const origSel=document.getElementById('sel_'+origRid);
+              const origRem=document.getElementById('rem_'+origRid);
+              const origVal=origSel?origSel.value:'na';
+              const origRemVal=origRem?origRem.value:'';
+              const rid=`perf_imp_${psec.id}_${ii}`;
+              const tr=mkRow(rid,ii+1,item,'m');
+              tr.classList.add('perf-imported');tr.dataset.perfSrc=sid;
+              tbody.appendChild(tr);
+              const impSel=document.getElementById('sel_'+rid);
+              if(impSel){impSel.value=origVal;impSel.className='ssel '+origVal;}
+              rowStyle(rid,origVal);
+              const impRem=document.getElementById('rem_'+rid);
+              if(impRem&&origRemVal)impRem.value=origRemVal;
+            });
           }
         }
       }
@@ -8809,7 +8800,6 @@ function onSel(rid,pfx,tab){
   }
   updStats(tab);updCnt(rid,pfx);updNg(tab);autoSave();
   _touchField('sel_'+rid); // 필드 타임스탬프 갱신
-  _refreshMiniPanels(); // 미니패널 val-label 즉시 갱신
 
   // 가져온 성능점검 항목 변경 시 → 성능점검 탭 원본에 강제 반영
   if(rid.startsWith('perf_imp_')){
@@ -10044,22 +10034,6 @@ function lbNav(dir){lbIdx=(lbIdx+dir+lbItems.length)%lbItems.length;showLb();}
 function closeLb(e){if(!e||e.target===document.getElementById('lb'))document.getElementById('lb').classList.remove('on');}
 
 /* ═══ 설비별 일괄 판정 ═══ */
-// ── 열린 미니패널 val-label 일괄 갱신 (bulk 판정 후 즉시 반영용) ──
-function _refreshMiniPanels(){
-  const vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
-  const cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
-  document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
-    const rid=div.dataset.rid;
-    const sel=document.getElementById('sel_'+rid);
-    if(!sel) return;
-    const vl=div.querySelector('.val-label');
-    if(vl){
-      vl.textContent=vMap[sel.value]||'—';
-      vl.style.color=cMap[sel.value]||'var(--mid)';
-    }
-  });
-}
-
 function bulkSec(bid,val,tab){
   const [pfx,secId]=bid.split(/_(.+)/);
   const blk=document.getElementById('blk_'+pfx+'_'+secId);
@@ -10078,7 +10052,6 @@ function bulkSec(bid,val,tab){
   updStats(tab);updCnt(secId,pfx);updNg(tab);
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();
-  _refreshMiniPanels();
 }
 
 /* ═══ 성능점검 탭에서 유지보수 항목 가져오기 ═══ */
@@ -10295,7 +10268,6 @@ function bulkOk(tab){
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();showToast('✓ 해당없음 → 적합 일괄 적용');
-  _refreshMiniPanels();
 }
 
 /* ═══ 일괄 해제 (전체 → 해당없음) ═══ */
@@ -10317,7 +10289,6 @@ function bulkNa(tab){
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();showToast('— 전체 판정 해당없음으로 초기화');
-  _refreshMiniPanels();
 }
 
 /* ═══ 갤러리 업로드 ═══ */
@@ -10778,7 +10749,6 @@ async function capturePhoto(){
   } else {
     addPhoto(rid, tab, url, name);
   }
-
 
   // 다른 설비에도 동시 적용 — 각 설비마다 고유한 명칭/위치로 표를 다시 그려서 별도 업로드
   // (같은 이미지를 그대로 복제하면 원본 설비의 표가 잘못 찍히는 문제가 있어, 깨끗한 원본에 재드로잉)
@@ -13441,8 +13411,6 @@ document.addEventListener('click',function(e){
 function openSheet(){
   var tbody=document.getElementById('sheet-tbody');
   tbody.innerHTML='';
-  // 현황표 열릴 때 잠금 상태 초기화 — 잠금해제면 반드시 클릭 가능하게
-  tbody.style.pointerEvents=_eqLocked?'none':'auto';
   // 모든 ecell 수집 (m 탭 기준)
   var cells=Array.from(document.querySelectorAll('#m-equip-grid .ecell'));
   if(!cells.length) cells=Array.from(document.querySelectorAll('.ecell'));
