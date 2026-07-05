@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.40</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.41</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8799,7 +8799,15 @@ function onSel(rid,pfx,tab){
     if(e.value!=='na') row.classList.add('row-active');
   }
   updStats(tab);updCnt(rid,pfx);updNg(tab);autoSave();
-  _touchField('sel_'+rid); // 필드 타임스탬프 갱신
+  _touchField('sel_'+rid);
+
+  // 열린 미니패널 val-label 즉시 업데이트 (2회 클릭 불필요)
+  const valMap={ok:'✅적합',ng:'❌부적합',na:'—'};
+  const colMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
+  document.querySelectorAll('.mini-panel [data-rid="'+rid+'"] .val-label').forEach(vl=>{
+    vl.textContent=valMap[e.value]||'—';
+    vl.style.color=colMap[e.value]||'var(--mid)';
+  });
 
   // 가져온 성능점검 항목 변경 시 → 성능점검 탭 원본에 강제 반영
   if(rid.startsWith('perf_imp_')){
