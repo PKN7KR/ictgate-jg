@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.43</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.44</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8801,14 +8801,6 @@ function onSel(rid,pfx,tab){
   updStats(tab);updCnt(rid,pfx);updNg(tab);autoSave();
   _touchField('sel_'+rid); // 필드 타임스탬프 갱신
 
-  // sel 변경 즉시 → 해당 rid의 미니패널 val-label 갱신 (2회 클릭 불필요)
-  const _vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
-  const _cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
-  document.querySelectorAll('[data-rid="'+rid+'"] .val-label').forEach(vl=>{
-    vl.textContent=_vMap[e.value]||'—';
-    vl.style.color=_cMap[e.value]||'var(--mid)';
-  });
-
   // 가져온 성능점검 항목 변경 시 → 성능점검 탭 원본에 강제 반영
   if(rid.startsWith('perf_imp_')){
     // perf_imp_p01_2 → 원본 rid = p01_2
@@ -10758,6 +10750,21 @@ async function capturePhoto(){
     addPhoto(rid, tab, url, name);
   }
 
+  // 사진 저장 완료 후 열린 미니패널 val-label 자동 갱신
+  // (촬영 후 화면 전환 시 판정값이 "—"으로 보이는 문제 해결)
+  setTimeout(()=>{
+    document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
+      const _r=div.dataset.rid;
+      const _s=document.getElementById('sel_'+_r);
+      if(!_s) return;
+      const _v=_s.value;
+      const _vm={ok:'✅적합',ng:'❌부적합',na:'—'};
+      const _cm={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
+      const _vl=div.querySelector('.val-label');
+      if(_vl){_vl.textContent=_vm[_v]||'—';_vl.style.color=_cm[_v]||'var(--mid)';}
+    });
+  },200);
+
   // 다른 설비에도 동시 적용 — 각 설비마다 고유한 명칭/위치로 표를 다시 그려서 별도 업로드
   // (같은 이미지를 그대로 복제하면 원본 설비의 표가 잘못 찍히는 문제가 있어, 깨끗한 원본에 재드로잉)
   if(_multiTargets.length){
@@ -10838,6 +10845,21 @@ function closeCam(){
   // FAB 숨김 유지 (탭바 버튼으로 대체됨)
   const _fab=document.getElementById('qc-fab');
   if(_fab) _fab.style.display='none';
+  // 카메라 닫힐 때 열린 미니패널 val-label 자동 갱신
+  // → 촬영하기로 화면 전환 시 판정 표시가 즉시 반영됨
+  const _vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
+  const _cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
+  document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
+    const rid=div.dataset.rid;
+    const sel=document.getElementById('sel_'+rid);
+    if(!sel) return;
+    const curVal=sel.value||'na';
+    const vl=div.querySelector('.val-label');
+    if(vl){
+      vl.textContent=_vMap[curVal]||'—';
+      vl.style.color=_cMap[curVal]||'var(--mid)';
+    }
+  });
 }
 
 /* ═══ TAB / SIDEBAR ═══ */
