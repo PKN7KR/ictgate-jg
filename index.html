@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.9.0</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.9.1</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1673,10 +1673,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
         style="margin-left:auto;flex-shrink:0;background:rgba(245,158,11,0.92);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:none;align-items:center;gap:4px;-webkit-tap-highlight-color:transparent">
         ⚡ 빠른촬영
       </button>
-      <button id="tab-ai-meter" onclick="startAiMeterScan()"
-        style="flex-shrink:0;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:none;-webkit-tap-highlight-color:transparent">
-        🤖 계측기
-      </button>
+
     </div>
     <!-- 설비 검색 — 탭바 아래 (tab-bar sticky에 포함) -->
     <div id="eq-search-wrap" style="position:sticky;top:calc(var(--brand-h) + var(--nav-h) + var(--tab-h));z-index:199;background:var(--wh);padding:4px 8px 6px;border-bottom:1px solid var(--br)">
@@ -4600,234 +4597,6 @@ ${itemList.map((it,i)=>`${i+1}. ${it}`).join('\n')}
 }
 
 // 사진 선택 팝업 → 1장 AI 분석 → 비고란 기입
-/* -----------------------------------------------
-   AI 계측기 자동 분석 (락 없음 / 단순 순차 처리)
-   - 탭 단위 일괄 실행
-   - 1단계: 계측기 사진 감지
-   - 2단계: 수치 읽기 → 비고란 자동 기입
-   ----------------------------------------------- */
-
-// ── 계측기 항목 매핑 테이블 (항목 추가 시 여기에만 추가) ──
-const AI_METER_MAP=[
-  {keywords:['접지저항'],
-   prompt:'접지저항계 또는 클램프미터 화면의 저항값을 읽어주세요. 숫자와 단위만 반환. 예) 0.026Ω'},
-  {keywords:['설치 환경','온도','습도'],
-   prompt:'온습도계 화면의 온도와 습도를 읽어주세요. 예) 온도 23.5°C, 습도 45%RH'},
-  {keywords:['산소도','가스 발생'],
-   prompt:'가스측정기의 수치를 읽어주세요. 예) O₂ 20.9%, CO 0ppm'},
-  {keywords:['AC 및 DC','입ㆍ출력 전압','입·출력 전압','충전전압','배터리 전압'],
-   prompt:'UPS LCD 또는 전압계의 전압값을 읽어주세요. 예) AC IN 228V, OUTPUT 221V'},
-  {keywords:['레벨값','신호 레벨','레벨 측정','출력 검사'],
-   prompt:'레벨미터 화면의 신호레벨값을 읽어주세요. 예) -3dBm 또는 75dBμV'},
-  {keywords:['전계강도','RSRP','전파환경'],
-   prompt:'전계강도계 수치를 읽어주세요. 예) -85dBm 또는 52dBμV/m'},
-  {keywords:['RF카드 자기장','RF카드 인식'],
-   prompt:'RF카드 측정기 수치를 읽어주세요. 예) 3.5mT 또는 인식거리 8cm'},
-  {keywords:['광 송·수신','광 송수신'],
-   prompt:'광파워미터 수치를 읽어주세요. 예) TX -18.5dBm, RX -22dBm'},
-  {keywords:['종단저항','75Ω'],
-   prompt:'임피던스측정기 저항값을 읽어주세요. 예) 74.8Ω'},
-  {keywords:['송신 출력','스퓨리어스'],
-   prompt:'전력계 또는 스펙트럼분석기 수치를 읽어주세요. 예) 25dBm 또는 -60dBc'},
-  {keywords:['수신감도'],
-   prompt:'수신감도 측정값을 읽어주세요. 예) -95dBm'},
-  {keywords:['도착전압','송출 및'],
-   prompt:'전압계의 전압을 읽어주세요. 예) AC 220V'},
-  {keywords:['축전지 비중'],
-   prompt:'비중계 수치를 읽어주세요. 예) 1.260'},
-];
-
-// ── Gemini API 호출 공통 함수 (URL 직접 전달) ──
-async function _geminiCall(photoUrl, prompt){
-  const key=getGeminiKey();
-  if(!key) return null;
-  try{
-    const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
-      {method:'POST',
-       headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({
-         contents:[{parts:[
-           {text:prompt},
-           {fileData:{mimeType:'image/jpeg',fileUri:photoUrl}}
-         ]}],
-         generationConfig:{temperature:0.1,maxOutputTokens:100}
-       }),
-       signal:AbortSignal.timeout(20000)
-      }
-    );
-    if(!res.ok) return null;
-    const d=await res.json();
-    return (d?.candidates?.[0]?.content?.parts?.[0]?.text||'').trim()||null;
-  }catch(e){ return null; }
-}
-
-// ── 1단계: 사진에서 계측기 감지 ──
-async function _aiDetectMeter(photoUrl){
-  const ans=await _geminiCall(photoUrl,
-    '이 사진에 계측기(측정기기, 미터기, 전압계, 저항계, 온습도계 등)의 수치 화면이 찍혀 있으면 YES, 없으면 NO만 답하세요.');
-  return ans && ans.trim().toUpperCase().startsWith('YES');
-}
-
-// ── 2단계: 계측기 수치 읽기 ──
-async function _aiReadValue(photoUrl, prompt){
-  const val=await _geminiCall(photoUrl, prompt+'\n수치가 보이지 않으면 "없음"만 반환하세요.');
-  if(!val||val==='없음'||val==='NO') return null;
-  return val.slice(0,60);
-}
-
-// ── 항목명으로 매핑 찾기 ──
-function _aiFindMap(itemText){
-  return AI_METER_MAP.find(m=>m.keywords.some(k=>itemText.includes(k)));
-}
-
-// ── AI 버튼 상태 ──
-let _aiMeterRunning=false;
-function _setAiMeterBtn(state, text){
-  const btn=document.getElementById('tab-ai-meter');
-  if(!btn) return;
-  btn.textContent=text;
-  btn.style.background=state==='run'?'#5b21b6':state==='done'?'#059669':'#7c3aed';
-  btn.disabled=state==='run';
-  btn.style.opacity=state==='run'?'.8':'1';
-}
-
-// ── 메인: AI 계측기 자동 분석 ──
-async function startAiMeterScan(){
-  if(_aiMeterRunning){showToast('⏳ 분석 중입니다...',2000);return;}
-  if(!getGeminiKey()){showToast('⚠️ Gemini API 키를 먼저 설정하세요',3000);return;}
-  if(!curRecId){showToast('⚠️ 점검표를 먼저 열어주세요',3000);return;}
-
-  _aiMeterRunning=true;
-  _setAiMeterBtn('run','🤖 분석 중...');
-
-  const filled=[], skipped=[], noPhoto=[];
-
-  try{
-    // 현재 탭 기준 설비 목록
-    const curTab=document.getElementById('tb-m')?.classList.contains('act')?'m':'p';
-    const data=curTab==='m'?MAINT_DATA:PERF_DATA;
-
-    // 사진 있는 설비만 처리
-    const targets=data.filter(sec=>{
-      const rid='__eq__'+curTab+'_'+sec.id;
-      const arr=photos[rid]||[];
-      return arr.some(p=>(p.url||p.srcUrl||'').startsWith('http'));
-    });
-
-    sysLog(`[AI계측기] 시작: ${targets.length}개 설비 (사진 있는 것만)`, 'info');
-    _setAiMeterBtn('run',`🤖 분석 중... 0/${targets.length}`);
-
-    for(let si=0;si<targets.length;si++){
-      const sec=targets[si];
-      const eqRid='__eq__'+curTab+'_'+sec.id;
-      const photoArr=(photos[eqRid]||[]).filter(p=>(p.url||p.srcUrl||'').startsWith('http'));
-      _setAiMeterBtn('run',`🤖 분석 중... ${si+1}/${targets.length}`);
-
-      // 이 설비의 계측기 항목 찾기
-      const blk=document.getElementById('blk_'+curTab+'_'+sec.id);
-      if(!blk){skipped.push(sec.name);continue;}
-
-      const rows=[...blk.querySelectorAll('tr[id^="row_"]')];
-      const meterRows=rows.filter(row=>{
-        const itemText=row.querySelector('.tdit-text,.tdit')?.textContent.trim()||'';
-        return !!_aiFindMap(itemText);
-      });
-
-      if(!meterRows.length){skipped.push(sec.name);continue;}
-
-      // 이 설비 사진 중 계측기 사진 찾기 (최대 6장 검사)
-      let meterPhoto=null;
-      const checkPhotos=photoArr.slice(-6); // 최근 6장
-      for(const p of checkPhotos){
-        const url=p.url||p.srcUrl;
-        const isMeter=await _aiDetectMeter(url);
-        if(isMeter){meterPhoto={...p,url};break;}
-        await new Promise(r=>setTimeout(r,1000)); // 1초 간격
-      }
-
-      if(!meterPhoto){
-        noPhoto.push(sec.name+'(계측기 사진 없음)');
-        continue;
-      }
-
-      // 계측기 사진 발견 → 각 계측기 항목에 수치 기입
-      for(const row of meterRows){
-        const itemText=row.querySelector('.tdit-text,.tdit')?.textContent.trim()||'';
-        const map=_aiFindMap(itemText);
-        if(!map) continue;
-
-        // 이미 비고란에 값 있으면 스킵
-        const remEl=row.querySelector('.rem-inp');
-        if(remEl&&_getRemValue(remEl)) continue;
-
-        // 수치 읽기
-        const val=await _aiReadValue(meterPhoto.url, map.prompt);
-        await new Promise(r=>setTimeout(r,2000)); // 2초 간격
-
-        if(val){
-          const rid=row.id.replace('row_','');
-          if(remEl){
-            _setRemValue(remEl,'🤖 '+val);
-            remEl.classList.add('ai-filled');
-          }
-          const remKey=remEl?.id?.replace('rem_','')||rid;
-          if(remKey) _remCache[remKey]='🤖 '+val;
-          autoSave();
-          filled.push({eq:sec.name, item:itemText.slice(0,15), val});
-          sysLog(`[AI계측기] ✅ ${sec.name} / ${itemText.slice(0,15)} → ${val}`,'info');
-        } else {
-          skipped.push(sec.name+' / '+itemText.slice(0,15));
-        }
-      }
-    }
-  }catch(e){
-    sysLog('[AI계측기] 오류: '+e.message,'warn');
-  }finally{
-    _aiMeterRunning=false;
-    _setAiMeterBtn('done','✅ 완료');
-    setTimeout(()=>_setAiMeterBtn('ready','🤖 계측기'),5000);
-    _showAiMeterResult(filled, skipped, noPhoto);
-  }
-}
-
-// ── 결과 모달 ──
-function _showAiMeterResult(filled, skipped, noPhoto){
-  const old=document.getElementById('ai-meter-result');
-  if(old) old.remove();
-  const pop=document.createElement('div');
-  pop.id='ai-meter-result';
-  pop.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-
-  let html=`<div style="background:#fff;border-radius:14px;padding:20px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;font-family:var(--sans)">
-  <div style="font-weight:700;font-size:17px;margin-bottom:12px">🤖 AI 계측기 분석 완료</div>
-  <div style="background:#f0fdf4;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px">
-    ✅ 비고란 기입: <b>${filled.length}건</b>
-  </div>`;
-
-  if(filled.length){
-    html+=`<div style="font-size:12px;font-weight:700;margin-bottom:6px;color:#166534">기입 완료</div>
-    <div style="background:#f0fdf4;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;max-height:150px;overflow-y:auto">`;
-    filled.forEach(f=>{ html+=`<div>✅ ${f.eq} / ${f.item} → <b>${f.val}</b></div>`; });
-    html+=`</div>`;
-  }
-
-  if(noPhoto.length||skipped.length){
-    html+=`<div style="font-size:12px;font-weight:700;margin-bottom:6px;color:#991b1b">⚠️ 수동 확인 필요</div>
-    <div style="background:#fff5f5;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:11px;color:#7f1d1d;max-height:120px;overflow-y:auto">`;
-    noPhoto.forEach(n=>{ html+=`<div>📷 ${n}</div>`; });
-    skipped.forEach(s=>{ html+=`<div>⬜ ${s}</div>`; });
-    html+=`</div>`;
-  }
-
-  html+=`<button onclick="document.getElementById('ai-meter-result').remove()"
-    style="width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">확인</button>
-  </div>`;
-
-  pop.innerHTML=html;
-  pop.onclick=e=>{if(e.target===pop)pop.remove();};
-  document.body.appendChild(pop);
-}
 
 function aiPickPhoto(rid, pfx){
   const key=getGeminiKey();
@@ -6795,9 +6564,7 @@ async function enterApp(user){
     // 탭바 빠른촬영 버튼 표시 (FAB 대체)
     const _tabQc=document.getElementById('tab-quick-cam');
     if(_tabQc) _tabQc.style.display='inline-flex';
-    // AI 계측기 분석 버튼 표시
-    const _tabAi=document.getElementById('tab-ai-meter');
-    if(_tabAi) _tabAi.style.display='inline-flex';
+
     // 기존 FAB 숨김
     const _qcFab=document.getElementById('qc-fab');
     if(_qcFab) _qcFab.style.display='none';
@@ -8557,36 +8324,46 @@ function toggleEq(sid,pfx){
   if(blk){
     blk.classList.toggle('vis',on);
     if(!on){
-      blk.querySelectorAll('.ssel').forEach(e=>{e.value='na';e.className='ssel na';});
-      blk.querySelectorAll('tr[id^="row_"]').forEach(r=>r.classList.remove('rok','rng'));
+      // 축소 시 sel 리셋 제거 — 판정값 보존
       blk.querySelectorAll('.perf-imported-hdr,.perf-imported').forEach(el=>el.remove());
-    } else if(pfx==='m'&&_perfImported){
-      const msec=MAINT_DATA.find(s=>s.id===sid);
-      if(msec){
-        const psec=PERF_DATA.find(p=>p.name===msec.name);
-        if(psec){
-          const tbody=blk.querySelector('tbody');
-          if(tbody&&!tbody.querySelector('.perf-imported')){
-            const hdr=document.createElement('tr');
-            hdr.className='perf-imported-hdr';hdr.dataset.perfSrc=sid;
-            hdr.innerHTML=`<td colspan="4">▸ 성능점검 항목 (${psec.name})</td>`;
-            tbody.appendChild(hdr);
-            psec.items.forEach((item,ii)=>{
-              const origRid=`${psec.id}_${ii}`;
-              const origSel=document.getElementById('sel_'+origRid);
-              const origRem=document.getElementById('rem_'+origRid);
-              const origVal=origSel?origSel.value:'na';
-              const origRemVal=origRem?origRem.value:'';
-              const rid=`perf_imp_${psec.id}_${ii}`;
-              const tr=mkRow(rid,ii+1,item,'m');
-              tr.classList.add('perf-imported');tr.dataset.perfSrc=sid;
-              tbody.appendChild(tr);
-              const impSel=document.getElementById('sel_'+rid);
-              if(impSel){impSel.value=origVal;impSel.className='ssel '+origVal;}
-              rowStyle(rid,origVal);
-              const impRem=document.getElementById('rem_'+rid);
-              if(impRem&&origRemVal)impRem.value=origRemVal;
-            });
+    } else {
+      // 확장 시 _memRecs에서 sel 값 복원 (이력 전환 시에도 판정값 유지)
+      const cur=_memRecs.find(r=>r.id===curRecId);
+      if(cur&&cur.sel){
+        blk.querySelectorAll('.ssel').forEach(e=>{
+          const val=cur.sel[e.id];
+          if(val){e.value=val;e.className='ssel '+val;rowStyle(e.id.replace('sel_',''),val);}
+        });
+      }
+      // 성능점검 항목 임포트 (m탭)
+      if(pfx==='m'&&_perfImported){
+        const msec=MAINT_DATA.find(s=>s.id===sid);
+        if(msec){
+          const psec=PERF_DATA.find(p=>p.name===msec.name);
+          if(psec){
+            const tbody=blk.querySelector('tbody');
+            if(tbody&&!tbody.querySelector('.perf-imported')){
+              const hdr=document.createElement('tr');
+              hdr.className='perf-imported-hdr';hdr.dataset.perfSrc=sid;
+              hdr.innerHTML=`<td colspan="4">▸ 성능점검 항목 (${psec.name})</td>`;
+              tbody.appendChild(hdr);
+              psec.items.forEach((item,ii)=>{
+                const origRid=`${psec.id}_${ii}`;
+                const origSel=document.getElementById('sel_'+origRid);
+                const origRem=document.getElementById('rem_'+origRid);
+                const origVal=origSel?origSel.value:'na';
+                const origRemVal=origRem?origRem.value:'';
+                const rid=`perf_imp_${psec.id}_${ii}`;
+                const tr=mkRow(rid,ii+1,item,'m');
+                tr.classList.add('perf-imported');tr.dataset.perfSrc=sid;
+                tbody.appendChild(tr);
+                const impSel=document.getElementById('sel_'+rid);
+                if(impSel){impSel.value=origVal;impSel.className='ssel '+origVal;}
+                rowStyle(rid,origVal);
+                const impRem=document.getElementById('rem_'+rid);
+                if(impRem&&origRemVal)impRem.value=origRemVal;
+              });
+            }
           }
         }
       }
