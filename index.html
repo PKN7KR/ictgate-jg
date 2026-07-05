@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.42</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.43</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8325,8 +8325,8 @@ function toggleEq(sid,pfx){
   if(blk){
     blk.classList.toggle('vis',on);
     if(!on){
-      // sel 값 리셋 제거 — 축소 시에도 판정값 유지
-      // (기존: e.value='na' 강제 리셋 → 판정 표시 초기화 버그 원인)
+      blk.querySelectorAll('.ssel').forEach(e=>{e.value='na';e.className='ssel na';});
+      blk.querySelectorAll('tr[id^="row_"]').forEach(r=>r.classList.remove('rok','rng'));
       blk.querySelectorAll('.perf-imported-hdr,.perf-imported').forEach(el=>el.remove());
     } else if(pfx==='m'&&_perfImported){
       const msec=MAINT_DATA.find(s=>s.id===sid);
@@ -8799,14 +8799,14 @@ function onSel(rid,pfx,tab){
     if(e.value!=='na') row.classList.add('row-active');
   }
   updStats(tab);updCnt(rid,pfx);updNg(tab);autoSave();
-  _touchField('sel_'+rid);
+  _touchField('sel_'+rid); // 필드 타임스탬프 갱신
 
-  // 열린 미니패널 val-label 즉시 업데이트 (2회 클릭 불필요)
-  const valMap={ok:'✅적합',ng:'❌부적합',na:'—'};
-  const colMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
-  document.querySelectorAll('.mini-panel [data-rid="'+rid+'"] .val-label').forEach(vl=>{
-    vl.textContent=valMap[e.value]||'—';
-    vl.style.color=colMap[e.value]||'var(--mid)';
+  // sel 변경 즉시 → 해당 rid의 미니패널 val-label 갱신 (2회 클릭 불필요)
+  const _vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
+  const _cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
+  document.querySelectorAll('[data-rid="'+rid+'"] .val-label').forEach(vl=>{
+    vl.textContent=_vMap[e.value]||'—';
+    vl.style.color=_cMap[e.value]||'var(--mid)';
   });
 
   // 가져온 성능점검 항목 변경 시 → 성능점검 탭 원본에 강제 반영
