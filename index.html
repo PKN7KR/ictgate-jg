@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.39</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.40</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -4191,14 +4191,9 @@ async function _svcLoadNtl(){
     if(invoices.length>0){
       invoices.forEach((inv,idx)=>{
         const invId=inv.id||('inv_'+idx);
-        // bb-api receipts 형식: transaction_created_at, display_amount
-        const dateStr=inv.date||inv.transaction_created_at||inv.created_at||'—';
-        const date=inv.date
-          ? inv.date  // ntl-usage.js에서 이미 포맷된 경우
-          : (inv.created_at
-            ? new Date(inv.created_at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})
-            : '—');
-        const amt=inv.amount||inv.display_amount||'$5.00';
+        // ntl-usage.js에서 이미 포맷됨: date(한국어), amount($X.XX)
+        const date=inv.date||'—';
+        const amt=inv.amount||'—';
         const isSettled=!!settled[invId];
         const settledBy=settled[invId]?.by||'';
         const settledAt=settled[invId]?.at?new Date(settled[invId].at).toLocaleDateString('ko-KR'):'';
