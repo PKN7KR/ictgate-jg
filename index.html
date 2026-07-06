@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.45</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.47</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -7252,7 +7252,7 @@ function loadHistory(){
     d.innerHTML='<div class="ht">'+co+pt+'</div>'
       +'<div class="hd">'+dt+' '+new Date(r.ts).toLocaleTimeString()+'</div>'
       +'<button class="hcopy" title="복제" onclick="event.stopPropagation();event.preventDefault();_cloneRec(\''+r.id+'\')">&#128203;</button>'
-      +'<button class="hsnap" title="스냅샷 버전 보기" onclick="event.stopPropagation();event.preventDefault();_showSnapshots(\''+r.id+'\',\''+co+'\')" style="position:absolute;top:8px;right:52px;border:none;background:transparent;color:var(--lt);cursor:pointer;font-size:13px;padding:2px">📋</button>'
+      +'<button class="hsnap" title="보존 이력 보기" onclick="event.stopPropagation();event.preventDefault();_showSnapshots(\''+r.id+'\',\''+co+'\')" style="position:absolute;top:8px;right:52px;border:none;background:transparent;color:var(--lt);cursor:pointer;font-size:13px;padding:2px">🕐</button>'
       +'<button class="hdel" onclick="event.stopPropagation();event.preventDefault();delRec(\''+r.id+'\')">&#10005;</button>';
     d.onclick=function(){loadRec(r);closeSb();};
     return d;
@@ -7755,6 +7755,11 @@ async function delRec(id){
   setTimeout(()=>{_noAutoSave=false;},500);
 }
 function newRec(){
+  // superadmin은 조회 전용 — 신규 생성 불가
+  if(curUser?.role==='superadmin'){
+    showToast('👁️ 조회 전용 계정 — 신규 생성 불가',2000);
+    return;
+  }
   if(curUser&&curUser.id==='guest'&&!isGuestLicensed()){
     const recs=lsGet();
     if(recs.length>=5){
@@ -8812,6 +8817,7 @@ function onSel(rid,pfx,tab){
   }
   updStats(tab);updCnt(rid,pfx);updNg(tab);autoSave();
   _touchField('sel_'+rid); // 필드 타임스탬프 갱신
+  _refreshMiniPanels(); // 미니패널 즉시 갱신
 
   // 가져온 성능점검 항목 변경 시 → 성능점검 탭 원본에 강제 반영
   if(rid.startsWith('perf_imp_')){
@@ -10046,6 +10052,19 @@ function lbNav(dir){lbIdx=(lbIdx+dir+lbItems.length)%lbItems.length;showLb();}
 function closeLb(e){if(!e||e.target===document.getElementById('lb'))document.getElementById('lb').classList.remove('on');}
 
 /* ═══ 설비별 일괄 판정 ═══ */
+// ── 열린 미니패널 val-label 즉시 갱신 ──
+function _refreshMiniPanels(){
+  const vMap={ok:'✅적합',ng:'❌부적합',na:'—'};
+  const cMap={ok:'var(--ok)',ng:'var(--ng)',na:'var(--mid)'};
+  document.querySelectorAll('.mini-panel [data-rid]').forEach(div=>{
+    const rid=div.dataset.rid;
+    const sel=document.getElementById('sel_'+rid);
+    if(!sel) return;
+    const vl=div.querySelector('.val-label');
+    if(vl){vl.textContent=vMap[sel.value]||'—';vl.style.color=cMap[sel.value]||'var(--mid)';}
+  });
+}
+
 function bulkSec(bid,val,tab){
   const [pfx,secId]=bid.split(/_(.+)/);
   const blk=document.getElementById('blk_'+pfx+'_'+secId);
@@ -10063,7 +10082,7 @@ function bulkSec(bid,val,tab){
   });
   updStats(tab);updCnt(secId,pfx);updNg(tab);
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
-  autoSave();
+  autoSave();_refreshMiniPanels();
 }
 
 /* ═══ 성능점검 탭에서 유지보수 항목 가져오기 ═══ */
@@ -10279,7 +10298,7 @@ function bulkOk(tab){
   updStats(tab);updNg(tab);
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
-  autoSave();showToast('✓ 해당없음 → 적합 일괄 적용');
+  autoSave();showToast('✓ 해당없음 → 적합 일괄 적용');_refreshMiniPanels();
 }
 
 /* ═══ 일괄 해제 (전체 → 해당없음) ═══ */
@@ -10300,7 +10319,7 @@ function bulkNa(tab){
   updStats(tab);updNg(tab);
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
-  autoSave();showToast('— 전체 판정 해당없음으로 초기화');
+  autoSave();showToast('— 전체 판정 해당없음으로 초기화');_refreshMiniPanels();
 }
 
 /* ═══ 갤러리 업로드 ═══ */
