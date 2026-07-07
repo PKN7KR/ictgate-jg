@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.49</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.52</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8297,45 +8297,44 @@ function refreshEqPhotos(rid,pfx,si){
   const secId=rid.replace('__eq__'+pfx+'_','');
   const wrap=document.getElementById('ephw_'+pfx+'_'+secId);
   if(!wrap)return;
-  // 현재 탭 사진
+  // 탭 완전 분리 — 현재 탭 사진만 표시 (반대 탭 사진 자동 공유 제거)
   const arr=photos[rid]||[];
-  // 반대 탭 같은 설비 사진도 합쳐서 표시 (유지보수↔성능점검 공유)
-  const oppPfx=pfx==='m'?'p':'m';
-  const oppRid='__eq__'+oppPfx+'_'+secId;
-  const oppArr=photos[oppRid]||[];
-  // 중복 URL 제거 후 합치기
-  const myUrls=new Set(arr.map(p=>p.url||p.srcUrl));
-  const combined=[...arr, ...oppArr.filter(p=>!myUrls.has(p.url||p.srcUrl))];
 
-  if(!combined.length){wrap.classList.remove('has-photo');wrap.innerHTML='';return;}
+  if(!arr.length){wrap.classList.remove('has-photo');wrap.innerHTML='';return;}
   wrap.classList.add('has-photo');
   const tab=pfx==='m'?'maint':'perf';
+  // 반대 탭 정보 (복사 버튼용)
+  const oppPfx=pfx==='m'?'p':'m';
+  const oppRid='__eq__'+oppPfx+'_'+secId;
+  const oppTabLabel=pfx==='m'?'→성능':'→유지';
   wrap.innerHTML='';
-  combined.forEach((p,i)=>{
-    const isOpp=i>=arr.length; // 반대 탭에서 온 사진
-    const div=document.createElement('div');div.className='ephoto';
-    if(isOpp) div.style.outline='2px dashed #38bdf8'; // 반대 탭 사진 표시
-    const img=document.createElement('img');img.src=p.srcUrl||p.url;img.title=p.name+(isOpp?' ('+oppPfx+'탭)':'');
-    img.onclick=e=>{e.stopPropagation();lbItems=combined.map((p,pi)=>({...p,_rid:isOpp?oppRid:rid,_idx:pi}));lbIdx=i;showLb();};
+  arr.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='ephoto';
+    // 둥근 모서리 적용
+    div.style.cssText='border-radius:10px;overflow:hidden;position:relative';
+    const img=document.createElement('img');
+    img.src=p.srcUrl||p.url;
+    img.title=p.name||'';
+    img.style.cssText='border-radius:10px;display:block;width:100%;height:100%;object-fit:cover';
+    img.onclick=e=>{e.stopPropagation();lbItems=arr.map((p,pi)=>({...p,_rid:rid,_idx:pi}));lbIdx=i;showLb();};
     const no=document.createElement('div');no.className='ephoto-no';
     no.textContent=`No.${String(i+1).padStart(2,'0')}`;
     const del=document.createElement('button');del.className='ephoto-del';del.title='사진 삭제';del.textContent='✕';
-    // 상대방이 잠금 중이면 삭제 버튼 비활성화
-    const eqKey2=(isOpp?oppPfx:pfx)+'_'+secId;
-    const remLocked=_lockStatusCache[eqKey2]&&_lockStatusCache[eqKey2].device_id!==_deviceSessionId;
-    if(remLocked){
-      del.disabled=true;
-      del.style.opacity='0.3';
-      del.title='상대방 편집 중 — 삭제 불가';
-    } else {
-      del.onclick=e=>{
-        e.stopPropagation();
-        const actualRid=isOpp?oppRid:rid;
-        const actualPfx=isOpp?oppPfx:pfx;
-        deleteEqPhoto(actualRid,actualPfx,isOpp?i-arr.length:i,tab);
-      };
-    }
-    div.appendChild(img);div.appendChild(no);div.appendChild(del);wrap.appendChild(div);
+    del.onclick=e=>{e.stopPropagation();deleteEqPhoto(rid,pfx,i,tab);};
+    // 반대 탭 복사 버튼
+    const copyBtn=document.createElement('button');
+    copyBtn.title=oppTabLabel+' 복사';
+    copyBtn.textContent=oppTabLabel;
+    copyBtn.style.cssText='position:absolute;bottom:22px;left:2px;background:rgba(124,58,237,.85);color:#fff;border:none;border-radius:5px;font-size:9px;padding:2px 5px;cursor:pointer;z-index:3;font-family:var(--mono)';
+    copyBtn.onclick=e=>{
+      e.stopPropagation();
+      // 반대 탭에 같은 URL로 사진 추가 (다운로드 불필요)
+      addPhoto(oppRid, oppPfx==='m'?'maint':'perf', p.url||p.srcUrl, p.name||'복사사진');
+      showToast(`📋 ${oppTabLabel} 탭에 복사됨`,2000);
+    };
+    div.appendChild(img);div.appendChild(no);div.appendChild(del);div.appendChild(copyBtn);
+    wrap.appendChild(div);
   });
 }
 
@@ -10093,6 +10092,7 @@ function bulkSec(bid,val,tab){
   updStats(tab);updCnt(secId,pfx);updNg(tab);
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();_refreshMiniPanels();
+  if(_coworkActive) setTimeout(()=>_coworkSave(),100);
 }
 
 /* ═══ 성능점검 탭에서 유지보수 항목 가져오기 ═══ */
@@ -10310,6 +10310,8 @@ function bulkOk(tab){
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();showToast('✓ 해당없음 → 적합 일괄 적용');_refreshMiniPanels();
+  // 타임스탬프 기록 후 즉시 DB 저장 (폴링 병합에 의한 원복 방지)
+  if(_coworkActive) setTimeout(()=>_coworkSave(),100);
 }
 
 /* ═══ 일괄 해제 (전체 → 해당없음) ═══ */
@@ -10332,6 +10334,7 @@ function bulkNa(tab){
   (tab==='maint'?MAINT_DATA:PERF_DATA).forEach(sec=>{updCnt(sec.id,pfx);});
   if(tab==='maint'&&_perfImported){updStats('perf');updNg('perf');}
   autoSave();showToast('— 전체 판정 해당없음으로 초기화');_refreshMiniPanels();
+  if(_coworkActive) setTimeout(()=>_coworkSave(),100);
 }
 
 /* ═══ 갤러리 업로드 ═══ */
@@ -10890,21 +10893,65 @@ function closeCam(){
 ═══════════════════════════════════════════════════ */
 
 // ── 공지 조회 및 팝업 표시 ──
+// 내장 공지 — 배포 시 자동 업로드 (superadmin 첫 접속 시 Supabase에 저장)
+const _BUILT_IN_NOTICE = {
+  id: 'v1.8.51',
+  version: 'v1.8.51',
+  title: '업데이트 안내',
+  content: `📋 v1.8.51 업데이트 안내
+
+✅ 사진 탭 분리 완전 수정
+  유지보수·관리와 성능점검 탭의
+  사진이 탭 전환 시 서로 남아 보이던
+  현상을 완전히 해결했습니다.
+
+✅ 탭 간 사진 복사 기능 추가
+  사진 썸네일 하단의 [→성능] 또는
+  [→유지] 버튼을 누르면 반대 탭에
+  동일 사진이 즉시 추가됩니다.
+  다운로드·재업로드가 필요 없습니다.
+
+✅ 사진 썸네일 둥근 모서리 적용
+  사진 모양이 더 깔끔해졌습니다.
+
+✅ 판정값 자동 원복 버그 수정
+  전체적합 등 일괄 판정 후
+  폴링 병합으로 원복되던 현상을
+  완전히 해결했습니다.
+
+✅ 확정 보존 기능
+  ... 메뉴 → 📸 확정 보존으로
+  현재 데이터를 영구 저장하고
+  이력 🕐 버튼으로 복원 가능합니다.`,
+  updated_at: '2026-07-07T11:49:00.000Z',
+  updated_by: 'system',
+};
+
 async function _checkAnnouncement(){
   try{
+    // superadmin이면 내장 공지를 Supabase에 자동 업로드 (없거나 구버전이면)
+    if(curUser?.role==='superadmin'){
+      const rows=await sbGet('accounts','?id=eq.__announcement__&select=meta');
+      const cur=rows&&rows[0]?.meta?JSON.parse(rows[0].meta||'{}'):{};
+      if(cur.id!==_BUILT_IN_NOTICE.id){
+        await sbUpsert('accounts',{
+          id:'__announcement__',role:'system',
+          name:'공지 관리',pw_hash:'__system_no_login__',
+          meta:JSON.stringify(_BUILT_IN_NOTICE),
+        });
+        sysLog('[공지] 내장 공지 자동 업로드: '+_BUILT_IN_NOTICE.id,'info');
+      }
+      return; // superadmin은 본인이 작성자라 팝업 안 뜸
+    }
+
     const rows=await sbGet('accounts','?id=eq.__announcement__&select=meta');
     if(!rows||!rows[0]?.meta) return;
     const ntc=JSON.parse(rows[0].meta||'{}');
     if(!ntc.content) return;
 
-    const ntcVer=ntc.version||'';
-    const ntcId=ntc.id||ntcVer||'default';
-
-    // 오늘 하루 안보기 체크
+    const ntcId=ntc.id||ntc.version||'default';
     const todayKey=`ntc_hide_${ntcId}_${new Date().toISOString().slice(0,10)}`;
     if(localStorage.getItem(todayKey)) return;
-
-    // 이 버전/공지 이미 영구 확인한 경우
     const doneKey=`ntc_done_${ntcId}`;
     if(localStorage.getItem(doneKey)) return;
 
@@ -12208,6 +12255,8 @@ function _coworkSharedUrl(code){
 // 공용 경로에 현재 상태 저장
 async function _coworkSave(){
   if(!_coworkActive) return;
+  // superadmin은 조회 전용 — DB 저장 완전 차단
+  if(curUser?.role==='superadmin') return;
   // Supabase가 주 저장소 — 현재 레코드 최신 상태 push
   try{
     const r=serialize();
