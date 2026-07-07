@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.54</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.55</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8303,10 +8303,6 @@ function refreshEqPhotos(rid,pfx,si){
   if(!arr.length){wrap.classList.remove('has-photo');wrap.innerHTML='';return;}
   wrap.classList.add('has-photo');
   const tab=pfx==='m'?'maint':'perf';
-  // 반대 탭 정보 (복사 버튼용)
-  const oppPfx=pfx==='m'?'p':'m';
-  const oppRid='__eq__'+oppPfx+'_'+secId;
-  const oppTabLabel=pfx==='m'?'→성능':'→유지';
   wrap.innerHTML='';
   arr.forEach((p,i)=>{
     const div=document.createElement('div');
@@ -8323,18 +8319,7 @@ function refreshEqPhotos(rid,pfx,si){
     no.textContent=`No.${String(i+1).padStart(2,'0')}`;
     const del=document.createElement('button');del.className='ephoto-del';del.title='사진 삭제';del.textContent='✕';
     del.onclick=e=>{e.stopPropagation();deleteEqPhoto(rid,pfx,i,tab);};
-    // 반대 탭 복사 버튼
-    const copyBtn=document.createElement('button');
-    copyBtn.title=oppTabLabel+' 복사';
-    copyBtn.textContent=oppTabLabel;
-    copyBtn.style.cssText='position:absolute;bottom:22px;left:2px;background:rgba(124,58,237,.85);color:#fff;border:none;border-radius:5px;font-size:9px;padding:2px 5px;cursor:pointer;z-index:3;font-family:var(--mono)';
-    copyBtn.onclick=e=>{
-      e.stopPropagation();
-      // 반대 탭에 같은 URL로 사진 추가 (다운로드 불필요)
-      addPhoto(oppRid, oppPfx==='m'?'maint':'perf', p.url||p.srcUrl, p.name||'복사사진');
-      showToast(`📋 ${oppTabLabel} 탭에 복사됨`,2000);
-    };
-    div.appendChild(img);div.appendChild(no);div.appendChild(del);div.appendChild(copyBtn);
+    div.appendChild(img);div.appendChild(no);div.appendChild(del);
     wrap.appendChild(div);
   });
 }
