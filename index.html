@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.48</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.49</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -1600,6 +1600,11 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
         <button class="more-menu-item" onclick="_manualSnapshot();_closeMore()" id="more-snapshot-btn">
           <div class="more-menu-icon" style="background:#fff7ed;">📸</div>
           <div class="more-menu-label"><div class="ml-ttl">확정 보존</div><div class="ml-sub">현재 점검 데이터 스냅샷 저장</div></div>
+          <span class="more-menu-arrow">›</span>
+        </button>
+        <button class="more-menu-item" id="more-announce-btn" onclick="_openAnnouncementEditor();_closeMore()" style="display:none">
+          <div class="more-menu-icon" style="background:#fdf4ff;">📢</div>
+          <div class="more-menu-label"><div class="ml-ttl">공지 관리</div><div class="ml-sub">버전 업데이트 안내 작성</div></div>
           <span class="more-menu-arrow">›</span>
         </button>
         <button class="more-menu-item" onclick="openGeminiSetting();_closeMore()">
@@ -6546,6 +6551,8 @@ async function enterApp(user){
       startCoworkPoll();
       startPerfMonitor(); // 메모리/배터리 모니터 시작
       sbLoadLocFavs().catch(()=>{});
+      // 로그인 후 공지 팝업 자동 표시
+      setTimeout(()=>_checkAnnouncement(), 1500);
     }
     // FAB 스크롤 시 자동 숨김
     const _fabEl=document.getElementById('qc-fab');
@@ -6575,6 +6582,9 @@ async function enterApp(user){
     if(_qcFab){
       _qcFab.style.display='none';
     }
+    // superadmin: 공지 관리 버튼 표시
+    const _ab=document.getElementById('more-announce-btn');
+    if(_ab) _ab.style.display=user.role==='superadmin'?'flex':'none';
     const _qcSh=document.getElementById('qc-shutter');
     if(_qcSh) _qcSh.onclick=function(){ _qcShoot(); };
     const _isSuperAdmin=user.role==='superadmin';
@@ -10872,6 +10882,183 @@ function closeCam(){
 
 // ── 스냅샷 저장 (수동) ──
 // ── 수동 확정 보존 ──
+/* ═══════════════════════════════════════════════════
+   📢 공지 시스템
+   - Supabase accounts.__announcement__ 행에 저장
+   - 로그인 시 자동 팝업 (버전별 1회 또는 오늘 하루 안보기)
+   - superadmin 전용 편집
+═══════════════════════════════════════════════════ */
+
+// ── 공지 조회 및 팝업 표시 ──
+async function _checkAnnouncement(){
+  try{
+    const rows=await sbGet('accounts','?id=eq.__announcement__&select=meta');
+    if(!rows||!rows[0]?.meta) return;
+    const ntc=JSON.parse(rows[0].meta||'{}');
+    if(!ntc.content) return;
+
+    const ntcVer=ntc.version||'';
+    const ntcId=ntc.id||ntcVer||'default';
+
+    // 오늘 하루 안보기 체크
+    const todayKey=`ntc_hide_${ntcId}_${new Date().toISOString().slice(0,10)}`;
+    if(localStorage.getItem(todayKey)) return;
+
+    // 이 버전/공지 이미 영구 확인한 경우
+    const doneKey=`ntc_done_${ntcId}`;
+    if(localStorage.getItem(doneKey)) return;
+
+    _showAnnouncementPopup(ntc);
+  }catch(e){
+    sysLog('[공지] 조회 실패: '+e.message,'warn');
+  }
+}
+
+// ── 공지 팝업 표시 ──
+function _showAnnouncementPopup(ntc){
+  const old=document.getElementById('ntc-popup');
+  if(old) old.remove();
+
+  const ntcId=ntc.id||ntc.version||'default';
+  const pop=document.createElement('div');
+  pop.id='ntc-popup';
+  pop.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  pop.innerHTML=`
+  <div style="background:#fff;border-radius:16px;padding:24px;max-width:400px;width:100%;font-family:var(--sans);box-shadow:0 20px 60px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:20px">📢</span>
+      <span style="font-weight:800;font-size:16px">${ntc.title||'업데이트 안내'}</span>
+    </div>
+    ${ntc.version?`<div style="font-size:11px;color:#7c3aed;font-weight:700;margin-bottom:12px;font-family:var(--mono)">${ntc.version}</div>`:''}
+    <div style="font-size:13px;line-height:1.7;color:#374151;margin-bottom:16px;white-space:pre-wrap;max-height:300px;overflow-y:auto;padding-right:4px">${ntc.content}</div>
+    <div style="font-size:11px;color:#9ca3af;margin-bottom:16px;text-align:right">${ntc.updated_at?new Date(ntc.updated_at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'}):''}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="_ntcConfirm('${ntcId}')"
+        style="width:100%;padding:12px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">
+        ✅ 확인했습니다
+      </button>
+      <button onclick="_ntcHideToday('${ntcId}')"
+        style="width:100%;padding:10px;background:#f3f4f6;color:#6b7280;border:none;border-radius:10px;font-size:13px;cursor:pointer">
+        오늘 하루 안 보기
+      </button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(pop);
+}
+
+// ── 확인 (영구) ──
+function _ntcConfirm(ntcId){
+  localStorage.setItem(`ntc_done_${ntcId}`,'1');
+  document.getElementById('ntc-popup')?.remove();
+}
+
+// ── 오늘 하루 안 보기 ──
+function _ntcHideToday(ntcId){
+  const todayKey=`ntc_hide_${ntcId}_${new Date().toISOString().slice(0,10)}`;
+  localStorage.setItem(todayKey,'1');
+  document.getElementById('ntc-popup')?.remove();
+}
+
+// ── 공지 편집 (superadmin 전용) ──
+async function _openAnnouncementEditor(){
+  if(curUser?.role!=='superadmin'){showToast('⚠️ 슈퍼어드민만 가능합니다',2000);return;}
+
+  // 현재 공지 불러오기
+  let cur={version:'',title:'',content:'',id:''};
+  try{
+    const rows=await sbGet('accounts','?id=eq.__announcement__&select=meta');
+    if(rows&&rows[0]?.meta) cur=JSON.parse(rows[0].meta);
+  }catch(e){}
+
+  const curVer=(document.querySelector('.ver-badge,.app-version')?.textContent||
+    document.body.innerHTML.match(/v \d+\.\d+\.\d+/)?.[0]||'').trim();
+
+  const old=document.getElementById('ntc-editor');
+  if(old) old.remove();
+
+  const ed=document.createElement('div');
+  ed.id='ntc-editor';
+  ed.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+  ed.innerHTML=`
+  <div style="background:#fff;border-radius:16px;padding:22px;max-width:440px;width:100%;font-family:var(--sans);max-height:90vh;overflow-y:auto">
+    <div style="font-weight:800;font-size:16px;margin-bottom:16px">📢 공지 편집 <span style="font-size:11px;color:#7c3aed;font-weight:700">(superadmin)</span></div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#374151">공지 ID (버전 또는 고유값)</div>
+      <input id="ntc-id" value="${cur.id||curVer||''}" placeholder="예: v1.8.48"
+        style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#374151">버전 표시</div>
+      <input id="ntc-ver" value="${cur.version||curVer||''}" placeholder="예: v1.8.48"
+        style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#374151">제목</div>
+      <input id="ntc-title" value="${cur.title||''}" placeholder="예: 버그 수정 안내"
+        style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:#374151">내용</div>
+      <textarea id="ntc-content" rows="8" placeholder="업데이트 내용을 입력하세요..."
+        style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.6;resize:vertical;box-sizing:border-box">${cur.content||''}</textarea>
+    </div>
+
+    <div style="background:#fdf4ff;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:#7c3aed">
+      💡 저장 후 모든 사용자가 다음 로그인 시 팝업으로 안내받습니다
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('ntc-editor').remove()"
+        style="flex:1;padding:11px;background:#f3f4f6;border:none;border-radius:10px;font-size:14px;cursor:pointer">취소</button>
+      <button onclick="_saveAnnouncement()"
+        style="flex:2;padding:11px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">💾 저장 및 발송</button>
+    </div>
+  </div>`;
+
+  ed.onclick=e=>{if(e.target===ed)ed.remove();};
+  document.body.appendChild(ed);
+}
+
+// ── 공지 저장 ──
+async function _saveAnnouncement(){
+  const id=document.getElementById('ntc-id')?.value.trim();
+  const ver=document.getElementById('ntc-ver')?.value.trim();
+  const title=document.getElementById('ntc-title')?.value.trim();
+  const content=document.getElementById('ntc-content')?.value.trim();
+
+  if(!content){showToast('⚠️ 내용을 입력해주세요',2000);return;}
+
+  const meta=JSON.stringify({
+    id: id||ver||Date.now().toString(),
+    version: ver||'',
+    title: title||'업데이트 안내',
+    content,
+    updated_at: new Date().toISOString(),
+    updated_by: curUser?.id||'superadmin',
+  });
+
+  try{
+    await sbUpsert('accounts',{
+      id:'__announcement__',
+      role:'system',
+      name:'공지 관리',
+      pw_hash:'__system_no_login__',
+      meta,
+    });
+    document.getElementById('ntc-editor')?.remove();
+    showToast('✅ 공지 저장됨 — 다음 로그인 시 모든 사용자에게 표시',3000);
+  }catch(e){
+    showToast('❌ 저장 실패: '+e.message,4000);
+  }
+}
+
 async function _manualSnapshot(){
   if(!curRecId){showToast('⚠️ 점검표를 먼저 열어주세요',2000);return;}
   const cur=_memRecs.find(r=>r.id===curRecId);
