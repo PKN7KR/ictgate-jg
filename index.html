@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.47</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.48</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -10073,11 +10073,11 @@ function bulkSec(bid,val,tab){
     e.value=val;e.className='ssel '+val;
     const rid=e.id.replace('sel_','');
     rowStyle(rid,val);
-    // 가져온 성능점검 항목이면 원본에도 동기화
+    _touchField('sel_'+rid); // LWW 병합 시 로컬값 보존
     if(rid.startsWith('perf_imp_')){
       const origRid=rid.replace(/^perf_imp_/,'');
       const origSel=document.getElementById('sel_'+origRid);
-      if(origSel){origSel.value=val;origSel.className='ssel '+val;rowStyle(origRid,val);}
+      if(origSel){origSel.value=val;origSel.className='ssel '+val;rowStyle(origRid,val);_touchField('sel_'+origRid);}
     }
   });
   updStats(tab);updCnt(secId,pfx);updNg(tab);
@@ -10288,10 +10288,11 @@ function bulkOk(tab){
       e.value='ok';e.className='ssel ok';
       const rid=e.id.replace('sel_','');
       rowStyle(rid,'ok');
+      _touchField('sel_'+rid); // LWW 병합 시 로컬값 보존
       if(rid.startsWith('perf_imp_')){
         const origRid=rid.replace(/^perf_imp_/,'');
         const origSel=document.getElementById('sel_'+origRid);
-        if(origSel){origSel.value='ok';origSel.className='ssel ok';rowStyle(origRid,'ok');}
+        if(origSel){origSel.value='ok';origSel.className='ssel ok';rowStyle(origRid,'ok');_touchField('sel_'+origRid);}
       }
     }
   });
@@ -10310,10 +10311,11 @@ function bulkNa(tab){
     e.value='na';e.className='ssel na';
     const rid=e.id.replace('sel_','');
     rowStyle(rid,'na');
+    _touchField('sel_'+rid); // LWW 병합 시 로컬값 보존
     if(rid.startsWith('perf_imp_')){
       const origRid=rid.replace(/^perf_imp_/,'');
       const origSel=document.getElementById('sel_'+origRid);
-      if(origSel){origSel.value='na';origSel.className='ssel na';rowStyle(origRid,'na');}
+      if(origSel){origSel.value='na';origSel.className='ssel na';rowStyle(origRid,'na');_touchField('sel_'+origRid);}
     }
   });
   updStats(tab);updNg(tab);
