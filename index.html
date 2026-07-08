@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.56</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.58</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -10899,35 +10899,31 @@ function closeCam(){
 // ── 공지 조회 및 팝업 표시 ──
 // 내장 공지 — 배포 시 자동 업로드 (superadmin 첫 접속 시 Supabase에 저장)
 const _BUILT_IN_NOTICE = {
-  id: 'v1.8.51',
-  version: 'v1.8.51',
+  id: 'v1.8.57',
+  version: 'v1.8.57',
   title: '업데이트 안내',
-  content: `📋 v1.8.51 업데이트 안내
+  content: `📋 v1.8.57 업데이트 안내
 
-✅ 사진 탭 분리 완전 수정
-  유지보수·관리와 성능점검 탭의
-  사진이 탭 전환 시 서로 남아 보이던
-  현상을 완전히 해결했습니다.
-
-✅ 탭 간 사진 복사 기능 추가
-  사진 썸네일 하단의 [→성능] 또는
-  [→유지] 버튼을 누르면 반대 탭에
-  동일 사진이 즉시 추가됩니다.
-  다운로드·재업로드가 필요 없습니다.
-
-✅ 사진 썸네일 둥근 모서리 적용
-  사진 모양이 더 깔끔해졌습니다.
-
-✅ 판정값 자동 원복 버그 수정
-  전체적합 등 일괄 판정 후
-  폴링 병합으로 원복되던 현상을
+✅ 판정값 병합 원복 문제 완전 해결
+  유지보수·관리와 성능점검을 동시에
+  작업할 때 상대방 데이터 병합으로
+  판정값이 되돌아가던 현상을
   완전히 해결했습니다.
+
+✅ 닫힌 설비 블록 판정값 보존
+  설비 블록을 접은 상태에서도
+  판정값이 정확히 저장됩니다.
+
+✅ 사진 탭 완전 분리
+  유지보수와 성능점검 탭의
+  사진이 서로 섞이지 않습니다.
+  사진 모서리가 둥글게 개선됐습니다.
 
 ✅ 확정 보존 기능
   ... 메뉴 → 📸 확정 보존으로
   현재 데이터를 영구 저장하고
   이력 🕐 버튼으로 복원 가능합니다.`,
-  updated_at: '2026-07-07T11:49:00.000Z',
+  updated_at: '2026-07-08T07:00:00.000Z',
   updated_by: 'system',
 };
 
@@ -12509,19 +12505,16 @@ function _cldMergeAndApply(remoteRecs){
 function startCoworkPoll(){
   if(_coworkTimer) return;
   if(!curUser||curUser.id==='guest') return;
-  // role 제한 제거 — 모든 로그인 계정 참여 가능
   _coworkActive=true;
-  // 즉시 저장 (내 현재 상태를 공용 경로에 올림)
-  _coworkSave();
-  // 로그인 직후 즉시 pull — 이력 바로 표시
+  // 즉시 pull — 이력 바로 표시 (저장은 하지 않음 — 빈 상태 덮어쓰기 방지)
   _coworkLoad().catch(()=>{});
-  // 1분 주기 pull
+  // 1분 주기 pull only (저장은 사용자 액션에서만)
   _coworkTimer=setInterval(async()=>{
     if(!curUser||curUser.id==='guest'){stopCoworkPoll();return;}
     sysLog('[Cowork] 자동 동기화 (1분 주기)','info');
     _setCoworkStatus('syncing');
     await _coworkLoad();
-    await _coworkSave(); // 내 변경사항도 공용 경로에 반영
+    // _coworkSave 제거 — 병합 후 즉시 저장하면 상대방 변경분 덮어씀
   }, COWORK_INTERVAL);
   // 화면 복귀 시 즉시 pull
   document.addEventListener('visibilitychange', _coworkVisHandler);
