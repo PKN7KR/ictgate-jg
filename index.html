@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.60</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.61</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8320,7 +8320,12 @@ function refreshEqPhotos(rid,pfx,si){
   wrap.classList.add('has-photo');
   const tab=pfx==='m'?'maint':'perf';
   const oppPfx=pfx==='m'?'p':'m';
-  const oppRid='__eq__'+oppPfx+'_'+secId;
+  // 설비명 기반으로 반대탭 같은 설비 찾기
+  const srcData=pfx==='m'?MAINT_DATA:PERF_DATA;
+  const oppData=pfx==='m'?PERF_DATA:MAINT_DATA;
+  const srcSec=srcData.find(s=>s.id===secId);
+  const oppSec=srcSec?oppData.find(s=>s.name===srcSec.name):null;
+  const oppRid=oppSec?'__eq__'+oppPfx+'_'+oppSec.id:null;
   wrap.innerHTML='';
   arr.forEach((p,i)=>{
     const div=document.createElement('div');
@@ -8350,6 +8355,7 @@ function refreshEqPhotos(rid,pfx,si){
       _isLong=false;
       _pt=setTimeout(()=>{
         _isLong=true;
+        if(!oppRid){showToast('⚠️ 반대 탭에 같은 설비 없음',2000);return;}
         if(!_photoSelectMode) _enterPhotoSelectMode(rid,pfx,oppRid,oppPfx);
         _togglePhotoCheck(div,i,p);
       },500);
