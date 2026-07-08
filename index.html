@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.55</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.56</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -7495,6 +7495,24 @@ function _setRemValue(el, val){
 function serialize(){
   const sel={},rem={},ng={},eqM={},eqP={},loc={};
   document.querySelectorAll('.ssel').forEach(e=>sel[e.id]=e.value);
+  // 닫힌 설비 블록의 sel 값 보완 — DOM에 없는 항목은 이전 저장값에서 가져옴
+  const _prevRec=(lsGet().find(r=>r.id===curRecId)||{});
+  const _prevSel=_prevRec.sel||{};
+  Object.keys(_prevSel).forEach(k=>{
+    // DOM에 없는 sel 키만 보완 (DOM 값 우선)
+    if(!(k in sel) || !document.getElementById(k)){
+      sel[k]=_prevSel[k];
+    }
+  });
+  // _memRecs에서도 보완 (더 최신)
+  const _memRec=_memRecs.find(r=>r.id===curRecId);
+  if(_memRec&&_memRec.sel){
+    Object.keys(_memRec.sel).forEach(k=>{
+      if(!(k in sel)||!document.getElementById(k)){
+        sel[k]=_memRec.sel[k];
+      }
+    });
+  }
   // display:none 상태의 iblock 안 rem-inp도 포함 (숨겨진 설비 비고값 보존)
   document.querySelectorAll('.rem-inp').forEach(e=>{if(e.id)rem[e.id.replace('rem_','')]=_getRemValue(e);});
   // 메모리 캐시(AI 기입값) 병합 - display:none 상태에서도 보존
@@ -12380,7 +12398,8 @@ async function _coworkLoad(){
         deserialize({...merged, photos:photos||{}});
         _noAutoSave=_noSave;
         lsSave({...merged, id:curRecId});
-        sbSaveRecord({...merged, id:curRecId}).catch(()=>{});
+        // sbSaveRecord 제거 — 병합 결과를 즉시 DB에 쓰면 상대방 변경분을 덮어쓸 수 있음
+        // 실제 저장은 사용자 액션(autoSave/bulkOk 등)에서만 수행
         sysLog('[Cowork] 필드 병합 완료: '+curRecId.slice(-8),'info');
         showToast('✅ 상대방 데이터 병합됨',2000);
       }
