@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.62</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.63</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8432,8 +8432,8 @@ async function _copySelectedPhotos(){
       if(!up.ok)throw new Error('업로드 실패');
       const upData=await up.json();
       const newUrl=upData.secure_url;
-      // 새 URL로 반대탭에 추가 (원본과 완전 독립)
-      addPhoto(_photoSelectOppRid,_photoSelectOppPfx==='m'?'maint':'perf',newUrl,p.name||'복사사진');
+      // 새 URL로 반대탭에 추가 (원본과 완전 독립, 자동 역방향 동기화 차단)
+      addPhoto(_photoSelectOppRid,_photoSelectOppPfx==='m'?'maint':'perf',newUrl,p.name||'복사사진',true);
       oppUrls.add(newUrl);
       copied++;
     }catch(e){
@@ -9988,7 +9988,7 @@ function makeThumb(url,maxW,maxH){
   });
 }
 
-function addPhoto(rid,tab,url,name){
+function addPhoto(rid,tab,url,name,_noCrossTab=false){
   if(!photos[rid])photos[rid]=[];
   photos[rid].push({url,name:name||'사진',thumb:null});
 
@@ -10001,21 +10001,22 @@ function addPhoto(rid,tab,url,name){
   if(rid.startsWith('__eq__')){
     const pfx=rid.includes('__eq__m_')?'m':'p';
     refreshEqPhotos(rid,pfx);
-    // 반대 탭 동일 설비 썸네일 동기화
-    const oppPfx=pfx==='m'?'p':'m';
-    const srcData=pfx==='m'?MAINT_DATA:PERF_DATA;
-    const oppData=pfx==='m'?PERF_DATA:MAINT_DATA;
-    const secId=rid.replace('__eq__'+pfx+'_','');
-    const srcSec=srcData.find(s=>s.id===secId);
-    if(srcSec){
-      const oppSec=oppData.find(s=>s.name===srcSec.name);
-      if(oppSec){
-        const oppRid='__eq__'+oppPfx+'_'+oppSec.id;
-        if(!photos[oppRid])photos[oppRid]=[];
-        // Cloudinary URL이면 thumb/srcUrl도 함께 설정
-        const _oppIsCloud=url.includes('cloudinary.com');
-        photos[oppRid].push({url,name:name||'사진',thumb:_oppIsCloud?url:null,srcUrl:_oppIsCloud?url:null});
-        refreshEqPhotos(oppRid,oppPfx);
+    // 반대 탭 동일 설비 썸네일 동기화 — 복사 시(_noCrossTab=true)는 건너뜀
+    if(!_noCrossTab){
+      const oppPfx=pfx==='m'?'p':'m';
+      const srcData=pfx==='m'?MAINT_DATA:PERF_DATA;
+      const oppData=pfx==='m'?PERF_DATA:MAINT_DATA;
+      const secId=rid.replace('__eq__'+pfx+'_','');
+      const srcSec=srcData.find(s=>s.id===secId);
+      if(srcSec){
+        const oppSec=oppData.find(s=>s.name===srcSec.name);
+        if(oppSec){
+          const oppRid='__eq__'+oppPfx+'_'+oppSec.id;
+          if(!photos[oppRid])photos[oppRid]=[];
+          const _oppIsCloud=url.includes('cloudinary.com');
+          photos[oppRid].push({url,name:name||'사진',thumb:_oppIsCloud?url:null,srcUrl:_oppIsCloud?url:null});
+          refreshEqPhotos(oppRid,oppPfx);
+        }
       }
     }
   }
