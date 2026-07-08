@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.58</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.60</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8315,31 +8315,118 @@ function refreshEqPhotos(rid,pfx,si){
   const secId=rid.replace('__eq__'+pfx+'_','');
   const wrap=document.getElementById('ephw_'+pfx+'_'+secId);
   if(!wrap)return;
-  // 탭 완전 분리 — 현재 탭 사진만 표시 (반대 탭 사진 자동 공유 제거)
   const arr=photos[rid]||[];
-
   if(!arr.length){wrap.classList.remove('has-photo');wrap.innerHTML='';return;}
   wrap.classList.add('has-photo');
   const tab=pfx==='m'?'maint':'perf';
+  const oppPfx=pfx==='m'?'p':'m';
+  const oppRid='__eq__'+oppPfx+'_'+secId;
   wrap.innerHTML='';
   arr.forEach((p,i)=>{
     const div=document.createElement('div');
     div.className='ephoto';
-    // 둥근 모서리만 추가 (크기는 기존 CSS 유지)
-    div.style.borderRadius='10px';
-    div.style.overflow='hidden';
+    div.style.borderRadius='10px';div.style.overflow='hidden';
+    div.dataset.idx=i;div.dataset.rid=rid;
+
     const img=document.createElement('img');
-    img.src=p.srcUrl||p.url;
-    img.title=p.name||'';
+    img.src=p.srcUrl||p.url;img.title=p.name||'';
     img.style.borderRadius='10px';
-    img.onclick=e=>{e.stopPropagation();lbItems=arr.map((p,pi)=>({...p,_rid:rid,_idx:pi}));lbIdx=i;showLb();};
+
+    // 체크 오버레이
+    const chk=document.createElement('div');
+    chk.className='photo-chk';
+    chk.style.cssText='display:none;position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.45);border:2px solid #fff;z-index:5;align-items:center;justify-content:center;font-size:13px;color:#fff';
+
     const no=document.createElement('div');no.className='ephoto-no';
     no.textContent=`No.${String(i+1).padStart(2,'0')}`;
-    const del=document.createElement('button');del.className='ephoto-del';del.title='사진 삭제';del.textContent='✕';
-    del.onclick=e=>{e.stopPropagation();deleteEqPhoto(rid,pfx,i,tab);};
-    div.appendChild(img);div.appendChild(no);div.appendChild(del);
+
+    const del=document.createElement('button');
+    del.className='ephoto-del';del.title='사진 삭제';del.textContent='✕';
+    del.onclick=e=>{e.stopPropagation();if(_photoSelectMode)return;deleteEqPhoto(rid,pfx,i,tab);};
+
+    // Long press 감지
+    let _pt=null,_isLong=false;
+    img.addEventListener('touchstart',()=>{
+      _isLong=false;
+      _pt=setTimeout(()=>{
+        _isLong=true;
+        if(!_photoSelectMode) _enterPhotoSelectMode(rid,pfx,oppRid,oppPfx);
+        _togglePhotoCheck(div,i,p);
+      },500);
+    },{passive:true});
+    img.addEventListener('touchend',()=>clearTimeout(_pt));
+    img.addEventListener('touchmove',()=>clearTimeout(_pt),{passive:true});
+    img.onclick=()=>{
+      if(_isLong){_isLong=false;return;}
+      if(_photoSelectMode){_togglePhotoCheck(div,i,p);return;}
+      lbItems=arr.map((p,pi)=>({...p,_rid:rid,_idx:pi}));lbIdx=i;showLb();
+    };
+
+    div.appendChild(img);div.appendChild(no);div.appendChild(del);div.appendChild(chk);
     wrap.appendChild(div);
   });
+}
+
+/* ── Long Press 사진 복사 ── */
+let _photoSelectMode=false,_photoSelectRid='',_photoSelectPfx='';
+let _photoSelectOppRid='',_photoSelectOppPfx='';
+let _photoSelected=new Set(),_photoSelectBar=null;
+
+function _enterPhotoSelectMode(rid,pfx,oppRid,oppPfx){
+  _photoSelectMode=true;
+  _photoSelectRid=rid;_photoSelectPfx=pfx;
+  _photoSelectOppRid=oppRid;_photoSelectOppPfx=oppPfx;
+  _photoSelected=new Set();
+  document.querySelectorAll(`[data-rid="${rid}"] .photo-chk`).forEach(c=>c.style.display='flex');
+  const oppLabel=pfx==='m'?'→성능':'→유지';
+  const bar=document.createElement('div');
+  bar.id='photo-select-bar';
+  bar.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#1e1b4b;color:#fff;z-index:9999;display:flex;align-items:center;gap:8px;padding:12px 16px;font-family:var(--sans)';
+  bar.innerHTML=`<span id="photo-sel-cnt" style="flex:1;font-size:13px;font-weight:700">0장 선택</span>
+    <button onclick="_copySelectedPhotos()" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">${oppLabel} 복사</button>
+    <button onclick="_exitPhotoSelectMode()" style="background:#374151;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer">취소</button>`;
+  document.body.appendChild(bar);_photoSelectBar=bar;
+  showToast('📸 복사할 사진을 선택하세요',1500);
+}
+
+function _togglePhotoCheck(div,idx){
+  const chk=div.querySelector('.photo-chk');if(!chk)return;
+  if(_photoSelected.has(idx)){
+    _photoSelected.delete(idx);chk.textContent='';chk.style.background='rgba(0,0,0,.45)';
+  } else {
+    _photoSelected.add(idx);chk.textContent='✓';chk.style.background='#7c3aed';
+  }
+  const cnt=document.getElementById('photo-sel-cnt');
+  if(cnt) cnt.textContent=`${_photoSelected.size}장 선택`;
+}
+
+function _copySelectedPhotos(){
+  if(!_photoSelected.size){showToast('⚠️ 사진을 선택해주세요',2000);return;}
+  const arr=photos[_photoSelectRid]||[];
+  const oppArr=photos[_photoSelectOppRid]||[];
+  const oppUrls=new Set(oppArr.map(p=>p.url||p.srcUrl));
+  let copied=0,skipped=0;
+  _photoSelected.forEach(idx=>{
+    const p=arr[idx];if(!p)return;
+    const url=p.url||p.srcUrl;
+    if(oppUrls.has(url)){skipped++;return;}
+    addPhoto(_photoSelectOppRid,_photoSelectOppPfx==='m'?'maint':'perf',url,p.name||'복사사진');
+    copied++;
+  });
+  const secId=_photoSelectRid.replace('__eq__'+_photoSelectPfx+'_','');
+  const data=_photoSelectOppPfx==='m'?MAINT_DATA:PERF_DATA;
+  const oppSi=data.findIndex(s=>s.id===secId);
+  if(oppSi>=0) refreshEqPhotos(_photoSelectOppRid,_photoSelectOppPfx,oppSi);
+  _exitPhotoSelectMode();
+  showToast(skipped?`📋 ${copied}장 복사 (${skipped}장 중복 스킵)`:`📋 ${copied}장 복사됨`,2500);
+}
+
+function _exitPhotoSelectMode(){
+  _photoSelectMode=false;_photoSelected=new Set();
+  document.querySelectorAll('.photo-chk').forEach(c=>{
+    c.style.display='none';c.textContent='';c.style.background='rgba(0,0,0,.45)';
+  });
+  if(_photoSelectBar){_photoSelectBar.remove();_photoSelectBar=null;}
 }
 
 function toggleEq(sid,pfx){
@@ -11354,11 +11441,26 @@ async function _qcShoot(){
 
 
 function switchTab(tab){
+  // 이전 탭 사진 DOM 초기화 (캐시 잔상 방지)
+  const prevPfx=tab==='maint'?'p':'m';
+  document.querySelectorAll(`[id^="ephw_${prevPfx}_"]`).forEach(w=>{
+    w.innerHTML='';
+    w.classList.remove('has-photo');
+  });
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('act'));
   document.getElementById('tb-m').classList.toggle('act',tab==='maint');
   document.getElementById('tb-p').classList.toggle('act',tab==='perf');
   document.getElementById('tab-'+tab).classList.add('act');
   updStats(tab);
+  // 탭 전환 시 선택 모드 자동 해제
+  if(typeof _photoSelectMode!=='undefined'&&_photoSelectMode) _exitPhotoSelectMode();
+  // 현재 탭 사진 재렌더링
+  const pfx=tab==='maint'?'m':'p';
+  const data=tab==='maint'?MAINT_DATA:PERF_DATA;
+  data.forEach((sec,si)=>{
+    const rid='__eq__'+pfx+'_'+sec.id;
+    if(photos[rid]&&photos[rid].length) refreshEqPhotos(rid,pfx,si);
+  });
   // 탭 전환 시 검색 결과창 닫기
   const sr=document.getElementById('eq-search-results');
   if(sr) sr.style.display='none';
