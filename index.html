@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.61</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.62</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -8406,25 +8406,53 @@ function _togglePhotoCheck(div,idx){
   if(cnt) cnt.textContent=`${_photoSelected.size}장 선택`;
 }
 
-function _copySelectedPhotos(){
+async function _copySelectedPhotos(){
   if(!_photoSelected.size){showToast('⚠️ 사진을 선택해주세요',2000);return;}
   const arr=photos[_photoSelectRid]||[];
   const oppArr=photos[_photoSelectOppRid]||[];
   const oppUrls=new Set(oppArr.map(p=>p.url||p.srcUrl));
-  let copied=0,skipped=0;
-  _photoSelected.forEach(idx=>{
-    const p=arr[idx];if(!p)return;
-    const url=p.url||p.srcUrl;
-    if(oppUrls.has(url)){skipped++;return;}
-    addPhoto(_photoSelectOppRid,_photoSelectOppPfx==='m'?'maint':'perf',url,p.name||'복사사진');
-    copied++;
-  });
+  let copied=0,skipped=0,failed=0;
+
+  showToast('📤 업로드 중...',3000);
+
+  for(const idx of _photoSelected){
+    const p=arr[idx];if(!p)continue;
+    const srcUrl=p.url||p.srcUrl;
+    if(oppUrls.has(srcUrl)){skipped++;continue;}
+
+    try{
+      // Cloudinary에 별도 파일로 재업로드 (완전 독립 복사)
+      const resp=await fetch(srcUrl);
+      const blob=await resp.blob();
+      const fd=new FormData();
+      fd.append('file',blob);
+      fd.append('upload_preset','ictsamjung');
+      fd.append('cloud_name','darovuaxi');
+      const up=await fetch('https://api.cloudinary.com/v1_1/darovuaxi/image/upload',{method:'POST',body:fd});
+      if(!up.ok)throw new Error('업로드 실패');
+      const upData=await up.json();
+      const newUrl=upData.secure_url;
+      // 새 URL로 반대탭에 추가 (원본과 완전 독립)
+      addPhoto(_photoSelectOppRid,_photoSelectOppPfx==='m'?'maint':'perf',newUrl,p.name||'복사사진');
+      oppUrls.add(newUrl);
+      copied++;
+    }catch(e){
+      sysLog('[복사] 재업로드 실패: '+e.message,'warn');
+      failed++;
+    }
+  }
+
+  // 반대탭 UI 갱신
   const secId=_photoSelectRid.replace('__eq__'+_photoSelectPfx+'_','');
   const data=_photoSelectOppPfx==='m'?MAINT_DATA:PERF_DATA;
   const oppSi=data.findIndex(s=>s.id===secId);
   if(oppSi>=0) refreshEqPhotos(_photoSelectOppRid,_photoSelectOppPfx,oppSi);
   _exitPhotoSelectMode();
-  showToast(skipped?`📋 ${copied}장 복사 (${skipped}장 중복 스킵)`:`📋 ${copied}장 복사됨`,2500);
+
+  let msg=`📋 ${copied}장 복사됨`;
+  if(skipped) msg+=` (${skipped}장 중복 스킵)`;
+  if(failed) msg+=` (${failed}장 실패)`;
+  showToast(msg,3000);
 }
 
 function _exitPhotoSelectMode(){
@@ -9100,22 +9128,7 @@ async function deleteEqPhoto(rid,pfx,idx,tab){
   const deletedUrl=deletedPhoto?.url||deletedPhoto?.srcUrl;
   photos[rid].splice(idx,1);
   refreshEqPhotos(rid,pfx);
-  // 반대 탭 동일 설비 동기화 삭제
-  const oppPfx=pfx==='m'?'p':'m';
-  const srcData=pfx==='m'?MAINT_DATA:PERF_DATA;
-  const oppData=pfx==='m'?PERF_DATA:MAINT_DATA;
-  const secId2=rid.replace('__eq__'+pfx+'_','');
-  const srcSec=srcData.find(s=>s.id===secId2);
-  if(srcSec&&deletedName){
-    const oppSec=oppData.find(s=>s.name===srcSec.name);
-    if(oppSec){
-      const oppRid='__eq__'+oppPfx+'_'+oppSec.id;
-      if(photos[oppRid]){
-        const oppIdx=photos[oppRid].findIndex(p=>p.name===deletedName);
-        if(oppIdx>=0){photos[oppRid].splice(oppIdx,1);refreshEqPhotos(oppRid,oppPfx);}
-      }
-    }
-  }
+  // 탭 간 복사된 사진은 독립 삭제 (반대탭 자동 삭제 제거)
   updGallery(tab);
   clearTimeout(autoTimer);
   lsSave(serialize());
@@ -9124,25 +9137,31 @@ async function deleteEqPhoto(rid,pfx,idx,tab){
 
   // Supabase photos 테이블 + Cloudinary 실제 삭제
   if(curUser&&curUser.id!=='guest'&&deletedUrl){
-    // URL을 직접 비교 (encodeURIComponent 사용 안 함 — Supabase가 이중 인코딩 처리 못함)
+    // 같은 URL이 다른 탭에도 있으면 Cloudinary 삭제 차단 (복사본 독립 삭제 보호)
+    const urlUsedElsewhere=Object.keys(photos).some(k=>
+      k!==rid && (photos[k]||[]).some(p=>(p.url||p.srcUrl)===deletedUrl)
+    );
     sbDelete('photos',`?record_id=eq.${curRecId}&url=eq.${deletedUrl}`)
       .then(()=>sysLog('[Photo] SB 삭제 완료','info'))
       .catch(e=>{
         sysLog('[Photo] SB 삭제 실패: '+e.message,'warn');
-        // 실패 시 name으로 재시도
         if(deletedName){
           sbDelete('photos',`?record_id=eq.${curRecId}&file_name=eq.${deletedName}`)
             .catch(()=>{});
         }
       });
-    // Cloudinary 실제 파일 삭제
-    const match=deletedUrl.match(/\/v\d+\/(.+)\.[a-z]+$/);
-    if(match){
-      fetch('/.netlify/functions/cld-delete',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({public_ids:[match[1]]})
-      }).catch(()=>{});
+    // Cloudinary 삭제 — 다른 탭에서 동일 URL 사용 중이면 건너뜀
+    if(!urlUsedElsewhere){
+      const match=deletedUrl.match(/\/v\d+\/(.+)\.[a-z]+$/);
+      if(match){
+        fetch('/.netlify/functions/cld-delete',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({public_ids:[match[1]]})
+        }).catch(()=>{});
+      }
+    } else {
+      sysLog('[Photo] 다른 탭에서 사용 중 — Cloudinary 삭제 건너뜀','info');
     }
   }
   showToast('사진 삭제됨');
