@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.63</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.64</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -7366,6 +7366,8 @@ function resetPhotos(caller=''){
   sysLog('[A5] photos 초기화 from:'+caller,'info');
 }
 let camStream=null,camRid=null,camTab=null,camSid=null,camFacing='environment';
+let _cachedTorchDeviceId=null;
+let _torchCacheReady=false;
 let flashOn=false,torchTrack=null,torchSupported=false;
 
 /* ── 자이로센서 기반 방향 감지 ── */
@@ -10605,35 +10607,40 @@ async function openCam(rid,tab,titleStr,secNo,secName,locText,sid){
   _cioTimer=setInterval(_updCioTime,1000);
 
   try{
-    // 후면 카메라 중 torch(플래시) 지원하는 카메라를 직접 찾아서 선택
-    // 플립폰/멀티카메라 기기 대응 — 모든 기기에서 플래시 작동하도록
+    // 후면 카메라 중 torch(플래시) 지원하는 카메라 선택
+    // 최초 1회만 탐색 후 캐시 — 이후 즉시 사용 (매번 탐색 지연 제거)
     let selectedDeviceId = null;
 
     if(camFacing==='environment'){
-      try{
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(d=>d.kind==='videoinput');
-
-        // 각 카메라를 순서대로 열어보면서 torch 지원하는 것 찾기
-        for(const device of videoDevices){
-          try{
-            const testStream = await navigator.mediaDevices.getUserMedia({
-              video:{ deviceId:{exact:device.deviceId} },
-              audio:false
-            });
-            const track = testStream.getVideoTracks()[0];
-            const caps = track.getCapabilities ? track.getCapabilities() : {};
-            const settings = track.getSettings ? track.getSettings() : {};
-            testStream.getTracks().forEach(t=>t.stop());
-
-            // torch 지원 + 후면 카메라인 경우 선택
-            if(caps.torch && (settings.facingMode==='environment' || !settings.facingMode)){
-              selectedDeviceId = device.deviceId;
-              break;
-            }
-          }catch(e){ continue; }
-        }
-      }catch(e){ /* enumerateDevices 실패 시 기본 방식 사용 */ }
+      if(_torchCacheReady){
+        // 캐시 있으면 즉시 사용
+        selectedDeviceId = _cachedTorchDeviceId;
+      } else {
+        // 최초 1회만 탐색
+        try{
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(d=>d.kind==='videoinput');
+          for(const device of videoDevices){
+            try{
+              const testStream = await navigator.mediaDevices.getUserMedia({
+                video:{ deviceId:{exact:device.deviceId} },
+                audio:false
+              });
+              const track = testStream.getVideoTracks()[0];
+              const caps = track.getCapabilities ? track.getCapabilities() : {};
+              const settings = track.getSettings ? track.getSettings() : {};
+              testStream.getTracks().forEach(t=>t.stop());
+              if(caps.torch && (settings.facingMode==='environment' || !settings.facingMode)){
+                selectedDeviceId = device.deviceId;
+                break;
+              }
+            }catch(e){ continue; }
+          }
+        }catch(e){}
+        // 탐색 결과 캐시 저장 (null이어도 저장 — 다음엔 탐색 안 함)
+        _cachedTorchDeviceId = selectedDeviceId;
+        _torchCacheReady = true;
+      }
     }
 
     // torch 지원 카메라 찾았으면 해당 카메라로, 아니면 기본 방식
