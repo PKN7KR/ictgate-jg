@@ -1550,7 +1550,7 @@ body.design-classic .sheet-card-box.sheet-card-mode{display:none!important;}
     </div>
   </div>
   <span class="brand-banner-tag">ICT INSPECTION MANAGEMENT SYSTEM</span>
-  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.64</span>
+  <span style="font-family:var(--mono);font-size:9px;color:#444;letter-spacing:.08em;margin-left:auto;padding-right:4px">v 1.8.65</span>
 </div>
 <nav>
   <div class="nav-logo"><em>ICT</em><span style="font-size:9px;letter-spacing:.1em">INSP</span></div>
@@ -5632,7 +5632,7 @@ async function sbLoadRecords(){
     const uid=curUser?.id||'unknown';
     const isSA=curUser?.role==='superadmin';
     const query=isSA
-      ? '?select=id,m_co,p_co,ts,data&order=ts.desc&limit=30'
+      ? '?owner_id=neq.samjung_team_v5&select=id,m_co,p_co,ts,data&order=ts.desc&limit=30' // v5(신버전 테스트) 레코드는 운영 이력에서 제외
       : `?owner_id=eq.${encodeURIComponent(uid)}&select=id,m_co,p_co,ts,data&order=ts.desc&limit=30`;
     const rows=await sbGet('records',query);
     return rows.map(r=>({...r.data, id:r.id, m_co:r.m_co, p_co:r.p_co, ts:r.ts}));
